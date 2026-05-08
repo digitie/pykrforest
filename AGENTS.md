@@ -54,6 +54,7 @@
 - `pykrforest/exceptions.py`: 예외 계층.
 - `tests/`: 네트워크 없는 단위 테스트와 opt-in live 테스트.
 - `docs/forest-api.md`: 구현 범위와 제외 범위의 기준 문서.
+- `docs/development-notes.md`: 로컬 개발 환경, 반복 이슈, 명령 실행 주의사항.
 - `docs/live-test-notes.md`: live test 키와 승인 상태 기록.
 
 ## 문서 규칙
@@ -61,9 +62,26 @@
 - 사용자 사용법 변경은 `README.md`를 갱신한다.
 - 구현 범위, 데이터셋, endpoint 변경은 `docs/forest-api.md`를 갱신한다.
 - live test 동작이나 승인 상태가 바뀌면 `docs/live-test-notes.md`를 갱신한다.
+- 로컬 개발 환경에서 반복되는 도구/인코딩 이슈는 `docs/development-notes.md`와
+  이 파일을 함께 갱신한다.
 - agent 작업 규칙이나 반복 실수 방지 규칙은 이 파일을 갱신한다.
 - 문서의 파일 위치 정보는 항상 프로젝트 기준 상대 경로로 작성한다.
 - 문서 예제의 API 키는 실제 값처럼 보이지 않는 placeholder만 사용한다.
+
+## 로컬 환경 반복 이슈
+
+- 이 환경에서는 `rg` 실행이 권한 문제로 실패할 수 있다. `rg`가 막히면 반복해서
+  재시도하지 말고 PowerShell 기본 명령으로 우회한다.
+- 파일 목록은 `Get-ChildItem -Recurse -File`, 파일명 필터는
+  `Get-ChildItem -Recurse -File -Filter *.py`, 텍스트 검색은
+  `Select-String -Path ... -Pattern ...`을 사용한다.
+- 문서는 UTF-8로 저장되어 있어도 PowerShell 기본 출력 인코딩 때문에 한글이 깨져
+  보일 수 있다. 문서가 깨졌다고 판단하기 전에 `Get-Content -Encoding utf8 <path>`로
+  다시 읽는다.
+- UTF-8 문서를 PowerShell로 쓰거나 변환해야 할 때는 `Set-Content -Encoding utf8`처럼
+  인코딩을 명시한다. 단순 코드 수정은 가능하면 `apply_patch`를 사용한다.
+- 한글 표시 검증이 필요하면 Python의 `Path.read_text(encoding="utf-8")`로 읽어
+  실제 파일 내용과 터미널 표시 문제를 구분한다.
 
 ## 구현 규칙
 

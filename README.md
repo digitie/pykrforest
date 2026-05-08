@@ -100,11 +100,12 @@ expected authorization xfail instead of hiding it.
 
 ## Development Notes
 
-프로젝트와 agent 작업 규칙은 `AGENTS.md`에 정리한다. 문서에서 파일 위치를
-언급할 때는 `pykrforest/client.py`, `docs/forest-api.md`처럼 프로젝트 루트 기준
-상대 경로를 쓴다. Python 내부 문서, 즉 모듈/클래스/함수/메서드 docstring과
-설명 주석은 provider 원문이나 코드 식별자를 보존해야 하는 경우를 제외하고
-한글로 작성한다.
+프로젝트와 agent 작업 규칙은 `AGENTS.md`에 정리한다. 로컬 개발 환경에서 반복된
+`rg` 권한 문제와 PowerShell UTF-8 출력 문제는 `docs/development-notes.md`를 따른다.
+문서에서 파일 위치를 언급할 때는 `pykrforest/client.py`, `docs/forest-api.md`처럼
+프로젝트 루트 기준 상대 경로를 쓴다. Python 내부 문서, 즉 모듈/클래스/함수/메서드
+docstring과 설명 주석은 provider 원문이나 코드 식별자를 보존해야 하는 경우를
+제외하고 한글로 작성한다.
 
 ## References
 
