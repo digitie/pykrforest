@@ -1,0 +1,125 @@
+# pykrforest
+
+Unofficial Python client for Korea Forest Service public data focused on travel
+and safety use cases.
+
+The package intentionally excludes broad biology, research, forestry-business,
+and unrelated administrative datasets. It covers:
+
+- travel: forest trails, dulle-gil, Baekdu-daegan trails, famous mountains,
+  mountain weather, recreation forest file datasets
+- safety: wildfire risk/statistics, landslide prediction/history, erosion-control
+  dams, safety file datasets
+
+## Install
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Service Key
+
+Pass a key explicitly or set one of these environment variables:
+
+- `PYKRFOREST_SERVICE_KEY`
+- `KFS_SERVICE_KEY`
+- `FOREST_SERVICE_KEY`
+- `DATA_GO_SERVICE_KEY`
+- `TRIPMATE_DATA_GO_SERVICE_KEY`
+
+```python
+from pykrforest import ForestClient
+
+client = ForestClient.from_env()
+page = client.travel.forest_services(num_of_rows=1)
+
+for item in page.items:
+    print(item)
+```
+
+## API Examples
+
+```python
+from pykrforest import ForestClient
+
+client = ForestClient("YOUR_DATA_GO_KR_KEY")
+
+# api.forest.go.kr legacy XML endpoint
+trails = client.travel.forest_services(num_of_rows=5)
+
+# Baekdu-daegan trail records
+baekdu = client.travel.baekdu_trails(num_of_rows=5)
+
+# data.go.kr wildfire endpoint. Some keys need separate approval.
+try:
+    fires = client.safety.wildfire_stats(
+        search_start_date="20240101",
+        search_end_date="20241231",
+        num_of_rows=5,
+    )
+except Exception as exc:
+    print(exc)
+```
+
+Every response is a `Page` with raw item mappings and safe call context:
+
+```python
+print(trails.total_count)
+print(trails.context.provider)
+print(trails.context.request_params)  # service key is removed
+```
+
+## File Datasets
+
+The file-data namespace exposes a curated catalog and can discover direct
+download URLs from data.go.kr detail pages.
+
+```python
+client = ForestClient.from_env()
+
+for dataset in client.files.datasets("travel"):
+    print(dataset.data_go_id, dataset.title, dataset.formats)
+
+url = client.files.download_url("15112801")
+sample = client.files.download("15112801", max_bytes=2048)
+```
+
+`15112801` is `산림청 국립자연휴양림관리소_숲나들e 숲길 100대명산 정보`.
+
+## Live Tests
+
+```powershell
+$env:TRIPMATE_DATA_GO_SERVICE_KEY = "..."
+pytest -m live
+```
+
+`api.forest.go.kr` trail endpoints are expected to pass with the tripmate
+data.go.kr key. Some `apis.data.go.kr/1400000` safety APIs may return HTTP 403
+unless the key has service-specific approval; live tests report that as an
+expected authorization xfail instead of hiding it.
+
+## Development Notes
+
+프로젝트와 agent 작업 규칙은 `AGENTS.md`에 정리한다. 문서에서 파일 위치를
+언급할 때는 `pykrforest/client.py`, `docs/forest-api.md`처럼 프로젝트 루트 기준
+상대 경로를 쓴다. Python 내부 문서, 즉 모듈/클래스/함수/메서드 docstring과
+설명 주석은 provider 원문이나 코드 식별자를 보존해야 하는 경우를 제외하고
+한글로 작성한다.
+
+## References
+
+The curated scope was checked against public data.go.kr pages, including:
+
+- https://www.data.go.kr/data/15002725/openapi.do
+- https://www.data.go.kr/data/15058682/openapi.do
+- https://www.data.go.kr/data/15002734/openapi.do
+- https://www.data.go.kr/data/15002731/openapi.do
+- https://www.data.go.kr/data/3071170/openapi.do
+- https://www.data.go.kr/data/15084696/openapi.do
+- https://www.data.go.kr/data/15084817/openapi.do
+- https://www.data.go.kr/data/3070842/openapi.do
+- https://www.data.go.kr/data/15074816/openapi.do
+- https://www.data.go.kr/data/15074800/openapi.do
+- https://www.data.go.kr/data/15074798/openapi.do
+- https://www.data.go.kr/data/15074812/openapi.do
+- https://www.data.go.kr/data/15074803/openapi.do

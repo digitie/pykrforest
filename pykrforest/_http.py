@@ -1,0 +1,359 @@
+"""산림청과 data.go.kr API용 HTTP helper."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any, Protocol, cast
+
+from ._convert import (
+    mask_params,
+    normalize_items,
+    public_params,
+    redact_secret,
+    to_int_or_none,
+    without_none,
+    xml_to_dict,
+)
+from .exceptions import (
+    ForestAuthError,
+    ForestNoDataError,
+    ForestParseError,
+    ForestRateLimitError,
+    ForestRequestError,
+    ForestServerError,
+)
+from .models import CallContext
+
+
+def _load_requests() -> Any:
+    try:
+        import requests
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise ForestRequestError("requests is required; install pykrforest dependencies") from exc
+    return requests
+
+
+class ResponseLike(Protocol):
+    status_code: int
+    text: str
+    content: bytes
+
+    def json(self) -> Any: ...
+
+
+class SessionLike(Protocol):
+    def get(self, url: str, **kwargs: Any) -> ResponseLike: ...
+
+
+def _new_session() -> SessionLike:
+    requests = _load_requests()
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (compatible; pykrforest/0.1; "
+                "+https://github.com/digitie/pykrforest)"
+            )
+        }
+    )
+    return cast(SessionLike, session)
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedPayload:
+    items: list[dict[str, Any]]
+    page_no: int | None
+    num_of_rows: int | None
+    total_count: int | None
+    raw: dict[str, Any]
+    header: dict[str, Any]
+    context: CallContext
+
+
+class ForestHttp:
+    """data.go.kr와 forest.go.kr 응답 envelope를 처리하는 저수준 HTTP 클라이언트."""
+
+    def __init__(
+        self,
+        service_key: str,
+        *,
+        timeout: float = 10.0,
+        session: SessionLike | None = None,
+        service_key_param: str = "ServiceKey",
+    ) -> None:
+        if not service_key:
+            raise ForestAuthError("service_key is required", failure_kind="auth")
+        if not service_key_param:
+            raise ValueError("service_key_param must not be empty")
+        self.service_key = service_key
+        self.timeout = timeout
+        self.session = session or _new_session()
+        self.service_key_param = service_key_param
+
+    def get(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        provider: str,
+        endpoint: str,
+        response_format: str = "xml",
+    ) -> NormalizedPayload:
+        query: dict[str, Any] = {self.service_key_param: self.service_key}
+        if provider == "data.go.kr" and response_format.lower() == "json":
+            query["_type"] = "json"
+        if params:
+            query.update(params)
+
+        safe_context = CallContext(
+            provider=provider,
+            endpoint=endpoint,
+            request_url=url,
+            request_params=public_params(query),
+            collected_at=datetime.now(UTC),
+        )
+        response = self.session.get(url, params=without_none(query), timeout=self.timeout)
+        _raise_for_status(
+            response,
+            provider=provider,
+            endpoint=endpoint,
+            service_key=self.service_key,
+            params=query,
+        )
+
+        payload = _decode_payload(
+            response,
+            provider=provider,
+            endpoint=endpoint,
+            service_key=self.service_key,
+            response_format=response_format,
+        )
+        return _normalize_payload(
+            payload,
+            provider=provider,
+            endpoint=endpoint,
+            context=safe_context,
+        )
+
+    def get_bytes(self, url: str, *, max_bytes: int | None = None) -> bytes:
+        response = self.session.get(url, timeout=self.timeout)
+        _raise_for_status(
+            response,
+            provider="data.go.kr",
+            endpoint=url,
+            service_key=self.service_key,
+            params={},
+        )
+        data = getattr(response, "content", b"")
+        if isinstance(data, bytes):
+            return data if max_bytes is None else data[:max_bytes]
+        encoded = str(data).encode()
+        return encoded if max_bytes is None else encoded[:max_bytes]
+
+
+def _decode_payload(
+    response: ResponseLike,
+    *,
+    provider: str,
+    endpoint: str,
+    service_key: str,
+    response_format: str,
+) -> dict[str, Any]:
+    text = response.text.strip()
+    try_json = response_format.lower() == "json" or text.startswith("{")
+    if try_json:
+        try:
+            payload = response.json()
+        except ValueError:
+            if not text.startswith("<"):
+                message = redact_secret(text[:300], service_key)
+                raise ForestParseError(
+                    f"response was not valid JSON: {message}",
+                    provider=provider,
+                    endpoint=endpoint,
+                    failure_kind="parse",
+                ) from None
+        else:
+            if not isinstance(payload, dict):
+                raise ForestParseError(
+                    "JSON response root must be an object",
+                    provider=provider,
+                    endpoint=endpoint,
+                    response=payload,
+                    failure_kind="parse",
+                )
+            return payload
+    if text.startswith("<"):
+        try:
+            return xml_to_dict(text)
+        except Exception as exc:
+            message = redact_secret(str(exc), service_key)
+            raise ForestParseError(
+                f"response was not valid XML: {message}",
+                provider=provider,
+                endpoint=endpoint,
+                failure_kind="parse",
+            ) from exc
+    message = redact_secret(text[:300], service_key)
+    raise ForestParseError(
+        f"unsupported response body: {message}",
+        provider=provider,
+        endpoint=endpoint,
+        failure_kind="parse",
+    )
+
+
+def _normalize_payload(
+    payload: dict[str, Any],
+    *,
+    provider: str,
+    endpoint: str,
+    context: CallContext,
+) -> NormalizedPayload:
+    if "OpenAPI_ServiceResponse" in payload:
+        _raise_openapi_service_error(
+            payload["OpenAPI_ServiceResponse"],
+            provider=provider,
+            endpoint=endpoint,
+        )
+
+    try:
+        response = payload["response"]
+        header = response.get("header", {})
+        body = response.get("body", {})
+    except (KeyError, AttributeError) as exc:
+        raise ForestParseError(
+            "response did not contain response.header/body",
+            provider=provider,
+            endpoint=endpoint,
+            response=payload,
+            failure_kind="parse",
+        ) from exc
+
+    if not isinstance(header, dict) or not isinstance(body, dict):
+        raise ForestParseError(
+            "response.header and response.body must be objects",
+            provider=provider,
+            endpoint=endpoint,
+            response=payload,
+            failure_kind="parse",
+        )
+
+    code = str(header.get("resultCode", "")).strip()
+    message = str(header.get("resultMsg", "")).strip()
+    if code not in {"", "00", "0000", "NORMAL_CODE"}:
+        if code == "03":
+            return NormalizedPayload(
+                items=[],
+                page_no=to_int_or_none(body.get("pageNo")),
+                num_of_rows=to_int_or_none(body.get("numOfRows")),
+                total_count=0,
+                raw=payload,
+                header=header,
+                context=context,
+            )
+        _raise_result_code(code, message, provider=provider, endpoint=endpoint, payload=payload)
+
+    try:
+        items = normalize_items(body.get("items", []))
+    except TypeError as exc:
+        raise ForestParseError(
+            str(exc),
+            provider=provider,
+            endpoint=endpoint,
+            response=payload,
+            failure_kind="parse",
+        ) from exc
+
+    return NormalizedPayload(
+        items=items,
+        page_no=to_int_or_none(body.get("pageNo")),
+        num_of_rows=to_int_or_none(body.get("numOfRows")),
+        total_count=to_int_or_none(body.get("totalCount")) or len(items),
+        raw=payload,
+        header=header,
+        context=context,
+    )
+
+
+def _raise_for_status(
+    response: ResponseLike,
+    *,
+    provider: str,
+    endpoint: str,
+    service_key: str,
+    params: dict[str, Any],
+) -> None:
+    status = int(response.status_code)
+    text = redact_secret(response.text, service_key)[:300]
+    kwargs: dict[str, Any] = {
+        "provider": provider,
+        "endpoint": endpoint,
+        "status_code": status,
+        "params": mask_params(params),
+    }
+    if status in {401, 403}:
+        raise ForestAuthError(f"HTTP {status}: {text}", failure_kind="auth", **kwargs)
+    if status == 429:
+        raise ForestRateLimitError(f"HTTP {status}: {text}", failure_kind="rate_limit", **kwargs)
+    if 400 <= status < 500:
+        raise ForestRequestError(f"HTTP {status}: {text}", failure_kind="request", **kwargs)
+    if 500 <= status < 600:
+        raise ForestServerError(f"HTTP {status}: {text}", failure_kind="server", **kwargs)
+
+
+def _raise_result_code(
+    code: str,
+    message: str,
+    *,
+    provider: str,
+    endpoint: str,
+    payload: dict[str, Any],
+) -> None:
+    text = f"{provider} returned {code}: {message}" if code else message
+    kwargs: dict[str, Any] = {
+        "provider": provider,
+        "endpoint": endpoint,
+        "result_code": code or None,
+        "response": payload,
+    }
+    upper = text.upper()
+    if code in {"20", "30", "31", "32", "33"} or "SERVICE_KEY" in upper or "AUTH" in upper:
+        raise ForestAuthError(text, failure_kind="auth", **kwargs)
+    if code == "22" or "LIMIT" in upper or "QUOTA" in upper:
+        raise ForestRateLimitError(text, failure_kind="rate_limit", **kwargs)
+    if code in {"04", "99"} or code.startswith("5"):
+        raise ForestServerError(text, failure_kind="server", **kwargs)
+    if code == "03":
+        raise ForestNoDataError(text, failure_kind="no_data", **kwargs)
+    raise ForestRequestError(text, failure_kind="request", **kwargs)
+
+
+def _raise_openapi_service_error(data: Any, *, provider: str, endpoint: str) -> None:
+    if not isinstance(data, dict):
+        raise ForestParseError(
+            "OpenAPI_ServiceResponse must be an object",
+            provider=provider,
+            endpoint=endpoint,
+            response=data,
+            failure_kind="parse",
+        )
+    header = data.get("cmmMsgHeader", data)
+    if not isinstance(header, dict):
+        raise ForestParseError(
+            "OpenAPI_ServiceResponse header must be an object",
+            provider=provider,
+            endpoint=endpoint,
+            response=data,
+            failure_kind="parse",
+        )
+    code = str(header.get("returnReasonCode", "")).strip()
+    message = str(
+        header.get("returnAuthMsg")
+        or header.get("errMsg")
+        or header.get("resultMsg")
+        or json.dumps(header, ensure_ascii=False)
+    )
+    _raise_result_code(code, message, provider=provider, endpoint=endpoint, payload=data)
