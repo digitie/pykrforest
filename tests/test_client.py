@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 import pytest
-from pykrtour import PlaceCoordinate
+from pykrtour import Address, PlaceCoordinate
 
 from pykrforest import ForestAuthError, Page
 from pykrforest.exceptions import ForestNoDataError
 
 from .conftest import FakeResponse, public_payload, xml_payload
+
+
+def download_html(name: str) -> str:
+    return f"""
+    <html><head>
+      <script type="application/ld+json">
+      {{"distribution": [{{"@type": "DataDownload",
+        "contentUrl": "https://files.example.test/{name}.csv"}}]}}
+      </script>
+    </head></html>
+    """
 
 
 def test_legacy_xml_endpoint_sends_service_key_and_parses_page(fake_client_factory):
@@ -106,6 +117,95 @@ def test_erosion_control_dams_returns_place_coordinate(fake_client_factory):
 
     assert page.items[0].coordinate == PlaceCoordinate(lon=127.1, lat=37.2)
     assert page.items[0].raw["name"] == "테스트사방댐"
+
+
+def test_recreation_forest_reservations_uses_lowercase_service_key(fake_client_factory):
+    xml = xml_payload(
+        """
+        <item>
+          <stngdt>20240228</stngdt>
+          <goodsnm>숲속의집</goodsnm>
+          <insttid>FR001</insttid>
+          <insttnm>덕유산자연휴양림</insttnm>
+          <status>예약가능</status>
+        </item>
+        """,
+        num_of_rows=1,
+    )
+    client, session = fake_client_factory(FakeResponse(text=xml))
+
+    page = client.travel.recreation_forest_reservations(
+        goods_name="숲속의집",
+        start_stay_date="20240228",
+        end_stay_date="20240228",
+        num_of_rows=1,
+    )
+
+    call = session.calls[0]
+    params = call["params"]
+    assert call["url"].endswith(
+        "/nationalRecreationForestReservationService/nationalRecreationForestReservationList"
+    )
+    assert params["serviceKey"] == "TEST_KEY"
+    assert "ServiceKey" not in params
+    assert "_type" not in params
+    assert params["goodsNm"] == "숲속의집"
+    assert params["startStngDt"] == "20240228"
+    assert params["endStngDt"] == "20240228"
+    assert "serviceKey" not in page.context.request_params
+    assert page.items[0].institution_id == "FR001"
+    assert page.items[0].institution_name == "덕유산자연휴양림"
+    assert page.items[0].goods_name == "숲속의집"
+    assert page.items[0].stay_date == "20240228"
+    assert page.items[0].status == "예약가능"
+
+
+def test_recreation_forests_combines_files_with_address_and_coordinate(fake_client_factory):
+    promotion_csv = (
+        "기관ID,기관명,주소,전화번호,최대수용인원,운영시간,설명\n"
+        "FR001,덕유산자연휴양림,전북 무주군 무풍면 구천동로 530-62,"
+        "063-322-1097,500,09:00-18:00,덕유산 숲\n"
+    )
+    facility_csv = (
+        "기관ID,기관명,상품명,위도,경도,홈페이지,지역\n"
+        "FR001,덕유산자연휴양림,숲속의집,35.9000,127.8000,"
+        "https://www.foresttrip.go.kr,전북\n"
+    )
+    policy_csv = "기관ID,기관명,정책구분,정책유형\nFR001,덕유산자연휴양림,추첨,주말\n"
+    reservation_csv = (
+        "insttid,insttnm,goodsnm,stngdt,status\n"
+        "FR001,덕유산자연휴양림,숲속의집,20240228,예약가능\n"
+    )
+    client, session = fake_client_factory(
+        FakeResponse(text=download_html("promotion")),
+        FakeResponse(text=promotion_csv, content=promotion_csv.encode()),
+        FakeResponse(text=download_html("facility")),
+        FakeResponse(text=facility_csv, content=facility_csv.encode()),
+        FakeResponse(text=download_html("policy")),
+        FakeResponse(text=policy_csv, content=policy_csv.encode()),
+        FakeResponse(text=download_html("reservation")),
+        FakeResponse(text=reservation_csv, content=reservation_csv.encode()),
+    )
+
+    forests = client.travel.recreation_forests()
+
+    assert [call["url"] for call in session.calls[::2]] == [
+        "https://www.data.go.kr/data/15064415/fileData.do",
+        "https://www.data.go.kr/data/15064419/fileData.do",
+        "https://www.data.go.kr/data/15064416/fileData.do",
+        "https://www.data.go.kr/data/15064418/fileData.do",
+    ]
+    forest = forests[0]
+    assert forest.institution_id == "FR001"
+    assert forest.name == "덕유산자연휴양림"
+    assert forest.coordinate == PlaceCoordinate(lon=127.8, lat=35.9)
+    assert isinstance(forest.address, Address)
+    assert forest.address.display_address == "전북 무주군 무풍면 구천동로 530-62"
+    assert forest.phone_number == "063-322-1097"
+    assert forest.homepage_url == "https://www.foresttrip.go.kr"
+    assert forest.facilities[0]["상품명"] == "숲속의집"
+    assert forest.reservation_policies[0]["정책구분"] == "추첨"
+    assert forest.reservation_records[0].goods_name == "숲속의집"
 
 
 def test_iter_pages_uses_page_metadata(fake_client_factory):

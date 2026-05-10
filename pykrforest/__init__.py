@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pykrtour import PlaceCoordinate
+from pykrtour import Address, PlaceCoordinate
 
 from .catalog import API_ENDPOINTS, FILE_DATASETS, api_endpoints, file_datasets
 from .client import ForestClient, KrForestClient, PyKrForestClient
@@ -23,10 +23,13 @@ from .models import (
     MountainWeather,
     Page,
     RawRecord,
+    RecreationForest,
+    RecreationForestReservation,
 )
 
 __all__ = [
     "API_ENDPOINTS",
+    "Address",
     "FILE_DATASETS",
     "ApiEndpoint",
     "CallContext",
@@ -46,6 +49,8 @@ __all__ = [
     "PlaceCoordinate",
     "PyKrForestClient",
     "RawRecord",
+    "RecreationForest",
+    "RecreationForestReservation",
     "api_endpoints",
     "file_datasets",
 ]

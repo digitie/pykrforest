@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Generic, Literal, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
-from pykrtour import PlaceCoordinate
+from pykrtour import Address, PlaceCoordinate
 
 RawRecord: TypeAlias = Mapping[str, Any]
 Category: TypeAlias = Literal["travel", "safety"]
@@ -73,6 +73,8 @@ class ApiEndpoint(ForestModel):
     detail_url: str
     description: str
     notes: str | None = None
+    service_key_param: str = "ServiceKey"
+    response_format: str | None = None
 
 
 class FileDataset(ForestModel):
@@ -100,3 +102,33 @@ class ErosionControlDam(ForestModel):
 
     coordinate: PlaceCoordinate | None = None
     raw: RawRecord = Field(repr=False)
+
+
+class RecreationForestReservation(ForestModel):
+    """국립자연휴양림 숙박 상품 예약 현황 레코드."""
+
+    institution_id: str | None = None
+    institution_name: str | None = None
+    goods_name: str | None = None
+    stay_date: str | None = None
+    status: str | None = None
+    raw: RawRecord = Field(repr=False)
+
+
+class RecreationForest(ForestModel):
+    """국립자연휴양림 파일데이터를 조합한 위치·주소·상세 정보."""
+
+    institution_id: str | None = None
+    name: str | None = None
+    coordinate: PlaceCoordinate | None = None
+    address: Address | None = None
+    phone_number: str | None = None
+    capacity: str | None = None
+    operation_time: str | None = None
+    homepage_url: str | None = None
+    region: str | None = None
+    description: str | None = None
+    facilities: tuple[RawRecord, ...] = ()
+    reservation_policies: tuple[RawRecord, ...] = ()
+    reservation_records: tuple[RecreationForestReservation, ...] = ()
+    raw: RawRecord = Field(default_factory=dict, repr=False)

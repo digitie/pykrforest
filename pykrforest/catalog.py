@@ -83,6 +83,28 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         notes="일부 인증키는 별도 활용신청 전 HTTP 403을 반환할 수 있다.",
     ),
     ApiEndpoint(
+        key="national_recreation_forest_reservations",
+        title="산림청_국립자연휴양림 예약정보",
+        data_go_id="15134227",
+        categories=("travel",),
+        provider="data.go.kr",
+        service="1400000/nationalRecreationForestReservationService",
+        operation="nationalRecreationForestReservationList",
+        url=(
+            "http://apis.data.go.kr/1400000/"
+            "nationalRecreationForestReservationService/"
+            "nationalRecreationForestReservationList"
+        ),
+        detail_url=f"{DATA_GO_BASE}/15134227/openapi.do",
+        description="기관, 상품명, 숙박일자, 예약 상태 기준 국립자연휴양림 예약 현황을 조회한다.",
+        notes=(
+            "공식 gateway endpoint는 인증 파라미터명을 소문자 serviceKey로 받으며 "
+            "XML을 반환한다."
+        ),
+        service_key_param="serviceKey",
+        response_format="xml",
+    ),
+    ApiEndpoint(
         key="wildfire_risk_forecast",
         title="산림청 국립산림과학원_산불위험예보정보",
         data_go_id="15084817",

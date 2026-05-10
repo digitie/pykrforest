@@ -100,8 +100,10 @@ class ForestHttp:
         provider: str,
         endpoint: str,
         response_format: str = "xml",
+        service_key_param: str | None = None,
     ) -> NormalizedPayload:
-        query: dict[str, Any] = {self.service_key_param: self.service_key}
+        key_param = service_key_param or self.service_key_param
+        query: dict[str, Any] = {key_param: self.service_key}
         if provider == "data.go.kr" and response_format.lower() == "json":
             query["_type"] = "json"
         if params:

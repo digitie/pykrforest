@@ -68,3 +68,22 @@ def test_live_data_go_safety_endpoint_is_either_authorized_or_clean_auth_error()
     else:
         assert page.context.provider == "data.go.kr"
         assert page.total_count >= len(page.items)
+
+
+def test_live_recreation_forest_reservations_is_either_authorized_or_clean_auth_error():
+    key = _service_key()
+    client = ForestClient(key, timeout=20)
+
+    try:
+        page = client.travel.recreation_forest_reservations(num_of_rows=1)
+    except ForestAuthError as exc:
+        assert exc.provider == "data.go.kr"
+        assert exc.failure_kind == "auth"
+        assert key not in str(exc)
+        pytest.xfail("data.go.kr 15134227 recreation forest reservation API is not approved")
+    else:
+        assert page.context.provider == "data.go.kr"
+        assert page.context.endpoint == "nationalRecreationForestReservationList"
+        assert "serviceKey" not in page.context.request_params
+        assert key not in repr(page.context.request_params)
+        assert page.total_count >= len(page.items)

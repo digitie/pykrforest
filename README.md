@@ -7,7 +7,7 @@ The package intentionally excludes broad biology, research, forestry-business,
 and unrelated administrative datasets. It covers:
 
 - travel: forest trails, dulle-gil, Baekdu-daegan trails, famous mountains,
-  mountain weather, recreation forest file datasets
+  mountain weather, recreation forest reservation API, recreation forest details
 - safety: wildfire risk/statistics, landslide prediction/history, erosion-control
   dams, safety file datasets
 
@@ -50,6 +50,14 @@ trails = client.travel.forest_services(num_of_rows=5)
 # Baekdu-daegan trail records
 baekdu = client.travel.baekdu_trails(num_of_rows=5)
 
+# National recreation forest reservation status
+reservations = client.travel.recreation_forest_reservations(
+    goods_name="숲속의집",
+    start_stay_date="20240228",
+    end_stay_date="20240228",
+    num_of_rows=5,
+)
+
 # data.go.kr wildfire endpoint. Some keys need separate approval.
 try:
     fires = client.safety.wildfire_stats(
@@ -69,17 +77,21 @@ print(trails.context.provider)
 print(trails.context.request_params)  # service key is removed
 ```
 
-Coordinate-bearing endpoints return `pykrtour.PlaceCoordinate` directly on the
-response model:
+Coordinate- and address-bearing models use `pykrtour` public value objects
+directly:
 
 ```python
-from pykrtour import PlaceCoordinate
+from pykrtour import Address, PlaceCoordinate
 
 weather = client.travel.mountain_weather(num_of_rows=1)
 point: PlaceCoordinate | None = weather.items[0].coordinate
 
 dams = client.safety.erosion_control_dams(num_of_rows=1)
 print(dams.items[0].coordinate)
+
+forests = client.travel.recreation_forests(name="덕유산")
+address: Address | None = forests[0].address
+coordinate: PlaceCoordinate | None = forests[0].coordinate
 ```
 
 ## File Datasets
@@ -98,6 +110,9 @@ sample = client.files.download("15112801", max_bytes=2048)
 ```
 
 `15112801` is `산림청 국립자연휴양림관리소_숲나들e 숲길 100대명산 정보`.
+`client.travel.recreation_forests()` combines the national recreation forest
+promotion, facility, reservation policy, and reservation file datasets into
+high-level detail records with `pykrtour.Address` and `pykrtour.PlaceCoordinate`.
 
 ## Live Tests
 
@@ -130,6 +145,7 @@ The curated scope was checked against public data.go.kr pages, including:
 - https://www.data.go.kr/data/15002731/openapi.do
 - https://www.data.go.kr/data/3071170/openapi.do
 - https://www.data.go.kr/data/15084696/openapi.do
+- https://www.data.go.kr/data/15134227/openapi.do
 - https://www.data.go.kr/data/15084817/openapi.do
 - https://www.data.go.kr/data/3070842/openapi.do
 - https://www.data.go.kr/data/15074816/openapi.do

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import re
@@ -10,8 +12,9 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 from urllib.parse import urljoin
 
-from pykrtour import PlaceCoordinate
+from pykrtour import Address, PlaceCoordinate
 
+from ._convert import strip_or_none
 from ._http import ForestHttp, SessionLike
 from .catalog import api_endpoint, api_endpoints, file_dataset, file_datasets
 from .exceptions import ForestAuthError, ForestNoDataError, ForestParseError, ForestRequestError
@@ -22,6 +25,8 @@ from .models import (
     MountainWeather,
     Page,
     RawRecord,
+    RecreationForest,
+    RecreationForestReservation,
 )
 
 DEFAULT_ENV_NAMES = (
@@ -32,6 +37,40 @@ DEFAULT_ENV_NAMES = (
     "TRIPMATE_DATA_GO_SERVICE_KEY",
 )
 T = TypeVar("T")
+
+_RECREATION_FOREST_PROMOTION_ID = "15064415"
+_RECREATION_FOREST_FACILITY_ID = "15064419"
+_RECREATION_FOREST_POLICY_ID = "15064416"
+_RECREATION_FOREST_RESERVATION_FILE_ID = "15064418"
+
+_INSTITUTION_ID_KEYS = (
+    "institution_id",
+    "insttId",
+    "insttid",
+    "기관ID",
+    "기관아이디",
+    "기관코드",
+    "휴양림ID",
+)
+_INSTITUTION_NAME_KEYS = (
+    "institution_name",
+    "insttNm",
+    "insttnm",
+    "기관명",
+    "휴양림명",
+    "자연휴양림명",
+    "명칭",
+)
+_GOODS_NAME_KEYS = ("goodsNm", "goodsnm", "상품명", "객실명", "시설명")
+_STAY_DATE_KEYS = ("stngDt", "stngdt", "숙박일자", "이용일자")
+_STATUS_KEYS = ("status", "상태", "예약상태")
+_PHONE_KEYS = ("phone_number", "전화번호", "대표전화번호", "연락처", "tel", "telNo")
+_CAPACITY_KEYS = ("capacity", "최대수용인원", "수용인원", "정원")
+_OPERATION_TIME_KEYS = ("operation_time", "운영시간", "이용시간")
+_HOMEPAGE_KEYS = ("homepage_url", "홈페이지", "홈페이지주소", "url", "URL")
+_REGION_KEYS = ("region", "지역", "시도", "시군구")
+_DESCRIPTION_KEYS = ("description", "설명", "소개", "개요", "내용")
+_EXTRA_ADDRESS_KEYS = ("소재지도로명주소", "기본주소", "주소지")
 
 
 class ForestClient:
@@ -159,13 +198,16 @@ class ForestClient:
         *,
         response_format: str | None = None,
     ) -> Page[T]:
-        fmt = response_format or ("json" if endpoint.provider == "data.go.kr" else "xml")
+        fmt = response_format or endpoint.response_format or (
+            "json" if endpoint.provider == "data.go.kr" else "xml"
+        )
         payload = self._http.get(
             endpoint.url,
             dict(params or {}),
             provider=endpoint.provider,
             endpoint=endpoint.operation,
             response_format=fmt,
+            service_key_param=endpoint.service_key_param,
         )
         parsed: list[T] = []
         for row in payload.items:
@@ -291,6 +333,54 @@ class TravelNamespace:
                 coordinate=PlaceCoordinate.from_mapping(row),
                 raw=row,
             ),
+        )
+
+    def recreation_forest_reservations(
+        self,
+        *,
+        goods_name: str | None = None,
+        start_stay_date: str | None = None,
+        end_stay_date: str | None = None,
+        page_no: int = 1,
+        num_of_rows: int = 10,
+        **params: Any,
+    ) -> Page[RecreationForestReservation]:
+        """국립자연휴양림 예약정보 OpenAPI 레코드를 조회한다."""
+
+        query = dict(params)
+        query["goodsNm"] = goods_name
+        query["startStngDt"] = start_stay_date
+        query["endStngDt"] = end_stay_date
+        return self._client._page(
+            api_endpoint("national_recreation_forest_reservations"),
+            _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            _parse_recreation_forest_reservation,
+            response_format="xml",
+        )
+
+    def recreation_forests(
+        self,
+        *,
+        name: str | None = None,
+        institution_id: str | None = None,
+    ) -> tuple[RecreationForest, ...]:
+        """휴양림 파일데이터를 조합해 위치, 주소, 시설, 예약 상세정보를 반환한다."""
+
+        promotion_rows = _csv_records(
+            self._client.files.download(_RECREATION_FOREST_PROMOTION_ID)
+        )
+        facility_rows = _csv_records(self._client.files.download(_RECREATION_FOREST_FACILITY_ID))
+        policy_rows = _csv_records(self._client.files.download(_RECREATION_FOREST_POLICY_ID))
+        reservation_rows = _csv_records(
+            self._client.files.download(_RECREATION_FOREST_RESERVATION_FILE_ID)
+        )
+        return _build_recreation_forests(
+            promotion_rows,
+            facility_rows,
+            policy_rows,
+            reservation_rows,
+            name=name,
+            institution_id=institution_id,
         )
 
 
@@ -496,6 +586,218 @@ def _page_params(
     if params:
         query.update(dict(params))
     return query
+
+
+def _parse_recreation_forest_reservation(row: dict[str, Any]) -> RecreationForestReservation:
+    return RecreationForestReservation(
+        institution_id=_first_text(row, *_INSTITUTION_ID_KEYS),
+        institution_name=_first_text(row, *_INSTITUTION_NAME_KEYS),
+        goods_name=_first_text(row, *_GOODS_NAME_KEYS),
+        stay_date=_first_text(row, *_STAY_DATE_KEYS),
+        status=_first_text(row, *_STATUS_KEYS),
+        raw=row,
+    )
+
+
+def _build_recreation_forests(
+    promotion_rows: tuple[dict[str, str], ...],
+    facility_rows: tuple[dict[str, str], ...],
+    policy_rows: tuple[dict[str, str], ...],
+    reservation_rows: tuple[dict[str, str], ...],
+    *,
+    name: str | None,
+    institution_id: str | None,
+) -> tuple[RecreationForest, ...]:
+    facility_index = _index_rows(facility_rows)
+    policy_index = _index_rows(policy_rows)
+    reservation_index = _index_rows(reservation_rows)
+    forests: list[RecreationForest] = []
+    name_filter = strip_or_none(name)
+    institution_filter = strip_or_none(institution_id)
+
+    for base_row in _recreation_forest_base_rows(
+        promotion_rows,
+        facility_rows,
+        policy_rows,
+        reservation_rows,
+    ):
+        forest_id = _first_text(base_row, *_INSTITUTION_ID_KEYS)
+        forest_name = _first_text(base_row, *_INSTITUTION_NAME_KEYS)
+        if institution_filter is not None and forest_id != institution_filter:
+            continue
+        if name_filter is not None and name_filter not in (forest_name or ""):
+            continue
+
+        facilities = _lookup_rows(facility_index, forest_id=forest_id, name=forest_name)
+        policies = _lookup_rows(policy_index, forest_id=forest_id, name=forest_name)
+        reservations = _lookup_rows(reservation_index, forest_id=forest_id, name=forest_name)
+        detail_rows: tuple[Mapping[str, Any], ...] = (base_row, *facilities)
+
+        address = Address.from_mapping(base_row)
+        if address is None:
+            text = _first_text(base_row, *_EXTRA_ADDRESS_KEYS)
+            address = Address.from_text(text) if text is not None else None
+        if address is None:
+            for row in facilities:
+                address = Address.from_mapping(row)
+                if address is None:
+                    text = _first_text(row, *_EXTRA_ADDRESS_KEYS)
+                    address = Address.from_text(text) if text is not None else None
+                if address is not None:
+                    break
+
+        coordinate = PlaceCoordinate.from_mapping(base_row)
+        if coordinate is None:
+            for row in facilities:
+                coordinate = PlaceCoordinate.from_mapping(row)
+                if coordinate is not None:
+                    break
+
+        forests.append(
+            RecreationForest(
+                institution_id=forest_id,
+                name=forest_name,
+                coordinate=coordinate,
+                address=address,
+                phone_number=_first_text_from_rows(detail_rows, *_PHONE_KEYS),
+                capacity=_first_text_from_rows(detail_rows, *_CAPACITY_KEYS),
+                operation_time=_first_text_from_rows(detail_rows, *_OPERATION_TIME_KEYS),
+                homepage_url=_first_text_from_rows(detail_rows, *_HOMEPAGE_KEYS),
+                region=_first_text_from_rows(detail_rows, *_REGION_KEYS),
+                description=_first_text_from_rows(detail_rows, *_DESCRIPTION_KEYS),
+                facilities=facilities,
+                reservation_policies=policies,
+                reservation_records=tuple(
+                    _parse_recreation_forest_reservation(dict(row)) for row in reservations
+                ),
+                raw={
+                    "promotion": base_row,
+                    "facilities": facilities,
+                    "reservation_policies": policies,
+                    "reservation_file_records": reservations,
+                },
+            )
+        )
+    return tuple(forests)
+
+
+def _csv_records(data: bytes) -> tuple[dict[str, str], ...]:
+    text = _decode_csv_text(data)
+    if not text.strip():
+        return ()
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        return ()
+    records: list[dict[str, str]] = []
+    for row in reader:
+        record: dict[str, str] = {}
+        for key, value in row.items():
+            if key is None:
+                continue
+            clean_key = key.strip()
+            clean_value = strip_or_none(value)
+            if clean_key and clean_value is not None:
+                record[clean_key] = clean_value
+        if record:
+            records.append(record)
+    return tuple(records)
+
+
+def _decode_csv_text(data: bytes) -> str:
+    for encoding in ("utf-8-sig", "cp949"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ForestParseError(
+        "CSV file dataset encoding is neither UTF-8 nor CP949",
+        provider="data.go.kr",
+        failure_kind="parse",
+    )
+
+
+def _recreation_forest_base_rows(
+    promotion_rows: tuple[dict[str, str], ...],
+    facility_rows: tuple[dict[str, str], ...],
+    policy_rows: tuple[dict[str, str], ...],
+    reservation_rows: tuple[dict[str, str], ...],
+) -> tuple[dict[str, str], ...]:
+    seen: set[str] = set()
+    rows: list[dict[str, str]] = []
+    for row in (*promotion_rows, *facility_rows, *policy_rows, *reservation_rows):
+        keys = _forest_index_keys(row)
+        if not keys:
+            continue
+        if seen.intersection(keys):
+            continue
+        seen.update(keys)
+        rows.append(row)
+    return tuple(rows)
+
+
+def _index_rows(rows: tuple[dict[str, str], ...]) -> dict[str, tuple[dict[str, str], ...]]:
+    groups: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        for key in _forest_index_keys(row):
+            groups.setdefault(key, []).append(row)
+    return {key: tuple(value) for key, value in groups.items()}
+
+
+def _lookup_rows(
+    index: Mapping[str, tuple[dict[str, str], ...]],
+    *,
+    forest_id: str | None,
+    name: str | None,
+) -> tuple[dict[str, str], ...]:
+    keys: list[str] = []
+    if forest_id:
+        keys.append(f"id:{forest_id}")
+    if name:
+        keys.append(f"name:{name}")
+    rows: list[dict[str, str]] = []
+    seen: set[int] = set()
+    for key in keys:
+        for row in index.get(key, ()):
+            identity = id(row)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            rows.append(row)
+    return tuple(rows)
+
+
+def _forest_index_keys(row: Mapping[str, Any]) -> tuple[str, ...]:
+    keys: list[str] = []
+    forest_id = _first_text(row, *_INSTITUTION_ID_KEYS)
+    forest_name = _first_text(row, *_INSTITUTION_NAME_KEYS)
+    if forest_id is not None:
+        keys.append(f"id:{forest_id}")
+    if forest_name is not None:
+        keys.append(f"name:{forest_name}")
+    return tuple(keys)
+
+
+def _first_text_from_rows(rows: tuple[Mapping[str, Any], ...], *keys: str) -> str | None:
+    for row in rows:
+        value = _first_text(row, *keys)
+        if value is not None:
+            return value
+    return None
+
+
+def _first_text(row: Mapping[str, Any], *keys: str) -> str | None:
+    lower_key_map = {str(key).lower(): key for key in row}
+    for key in keys:
+        value = strip_or_none(row.get(key))
+        if value is not None:
+            return value
+        actual_key = lower_key_map.get(key.lower())
+        if actual_key is None:
+            continue
+        value = strip_or_none(row.get(actual_key))
+        if value is not None:
+            return value
+    return None
 
 
 def _extract_download_url(html: str, *, base_url: str) -> str:

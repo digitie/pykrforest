@@ -10,6 +10,7 @@ def test_catalog_has_travel_and_safety_api_endpoints():
     keys = {endpoint.key for endpoint in API_ENDPOINTS}
 
     assert "forest_trail_services" in keys
+    assert "national_recreation_forest_reservations" in keys
     assert "wildfire_stats" in keys
     assert "landslide_predictions" in keys
     assert {endpoint.provider for endpoint in API_ENDPOINTS} == {"forest.go.kr", "data.go.kr"}
@@ -27,6 +28,10 @@ def test_catalog_filters_by_category():
 
 def test_catalog_lookup_and_invalid_category():
     assert api_endpoint("baekdu_trails").data_go_id == "15002731"
+    assert api_endpoint("national_recreation_forest_reservations").service_key_param == (
+        "serviceKey"
+    )
+    assert api_endpoint("national_recreation_forest_reservations").response_format == "xml"
     assert file_dataset("15112801").formats == ("CSV",)
 
     with pytest.raises(ValueError, match="category"):

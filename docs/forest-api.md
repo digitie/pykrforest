@@ -14,6 +14,7 @@ outdoor recreation, wildfire, landslide, and forest safety data.
 | `baekdu_trails` | travel | forest.go.kr | 15002731 | `trailInfoService/gettrailservice` |
 | `famous_mountain_trails` | travel | forest.go.kr | 3071170 | `cultureInfoService/gdTrailInfoImgOpenAPI` |
 | `mountain_weather` | travel, safety | data.go.kr | 15084696 | `1400377/mtweather/mountListSearch` |
+| `national_recreation_forest_reservations` | travel | data.go.kr | 15134227 | `1400000/nationalRecreationForestReservationService/nationalRecreationForestReservationList` |
 | `wildfire_risk_forecast` | safety | data.go.kr | 15084817 | `1400377/forestPoint/forestPointListGeongugSearch` |
 | `wildfire_stats` | safety | data.go.kr | 3070842 | `1400000/forestStusService/getfirestatsservice` |
 | `past_landslides` | safety | data.go.kr | 15074816 | `1400000/pastLndslInfoService/pastLndslInfoList` |
@@ -30,6 +31,13 @@ Notes:
   the checked tripmate key on 2026-05-08. The client still implements them
   because they are public endpoints, but live tests mark missing approval
   cleanly as authorization xfail.
+- `national_recreation_forest_reservations` uses the official
+  `serviceKey` query parameter name and returns XML reservation status items
+  with institution, goods, stay date, and status fields.
+- `client.travel.recreation_forests()` combines the national recreation forest
+  promotion, facility, reservation policy, and reservation file datasets into a
+  high-level detail record with `pykrtour.Address` and
+  `pykrtour.PlaceCoordinate`.
 
 ## Implemented File Datasets
 
