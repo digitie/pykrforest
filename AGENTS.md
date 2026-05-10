@@ -85,6 +85,11 @@
 
 ## 구현 규칙
 
+- 불필요한 thin wrapper나 호환 계층을 새로 만들지 않는다. `pykma`, `pyopinet`,
+  `pykex` 등 유사 라이브러리에 이미 검증된 구현이 있으면 최소 수정 원칙과
+  방향이 다르더라도 필요한 구조와 동작을 직접 적용해 프로젝트 간 일관성을 맞춘다.
+- 다른 라이브러리의 구현을 가져올 때도 `pykrforest`의 여행/안전/파일데이터 범위를
+  벗어나는 endpoint나 데이터셋은 함께 추가하지 않는다.
 - 새 endpoint wrapper는 `catalog.py`에 metadata를 먼저 추가하고 `client.py`에서
   namespace 메서드를 제공한다.
 - public method는 안정적인 의미가 있는 값을 typed 모델이나 raw mapping으로 일관되게
