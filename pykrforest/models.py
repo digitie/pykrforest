@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Generic, Literal, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
+from pykrtour import PlaceCoordinate
 
 RawRecord: TypeAlias = Mapping[str, Any]
 Category: TypeAlias = Literal["travel", "safety"]
@@ -85,3 +86,17 @@ class FileDataset(ForestModel):
     description: str
     provider: str = "data.go.kr"
     direct_download: bool = True
+
+
+class MountainWeather(ForestModel):
+    """산악기상 관측 지점과 기상 원본 레코드."""
+
+    coordinate: PlaceCoordinate | None = None
+    raw: RawRecord = Field(repr=False)
+
+
+class ErosionControlDam(ForestModel):
+    """사방댐 원본 레코드."""
+
+    coordinate: PlaceCoordinate | None = None
+    raw: RawRecord = Field(repr=False)

@@ -69,6 +69,19 @@ print(trails.context.provider)
 print(trails.context.request_params)  # service key is removed
 ```
 
+Coordinate-bearing endpoints return `pykrtour.PlaceCoordinate` directly on the
+response model:
+
+```python
+from pykrtour import PlaceCoordinate
+
+weather = client.travel.mountain_weather(num_of_rows=1)
+point: PlaceCoordinate | None = weather.items[0].coordinate
+
+dams = client.safety.erosion_control_dams(num_of_rows=1)
+print(dams.items[0].coordinate)
+```
+
 ## File Datasets
 
 The file-data namespace exposes a curated catalog and can discover direct

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pykrtour import PlaceCoordinate
 
 from pykrforest import ForestAuthError, Page
 from pykrforest.exceptions import ForestNoDataError
@@ -65,6 +66,46 @@ def test_wildfire_stats_maps_date_arguments(fake_client_factory):
     params = session.calls[0]["params"]
     assert params["searchStDt"] == "20240101"
     assert params["searchEdDt"] == "20241231"
+
+
+def test_mountain_weather_returns_place_coordinate(fake_client_factory):
+    payload = public_payload(
+        {"stationName": "관악산", "xValue": "126.9636", "yValue": "37.4450"},
+        total_count=1,
+    )
+    client, _session = fake_client_factory(FakeResponse(payload))
+
+    page = client.travel.mountain_weather(num_of_rows=1)
+
+    assert isinstance(page.items[0].coordinate, PlaceCoordinate)
+    assert page.items[0].coordinate == PlaceCoordinate(lon=126.9636, lat=37.445)
+    assert page.items[0].raw["stationName"] == "관악산"
+
+
+def test_mountain_weather_missing_coordinate_is_none(fake_client_factory):
+    payload = public_payload(
+        {"stationName": "관악산", "xValue": "-99.000000", "yValue": "-99.000000"},
+        total_count=1,
+    )
+    client, _session = fake_client_factory(FakeResponse(payload))
+
+    page = client.travel.mountain_weather(num_of_rows=1)
+
+    assert page.items[0].coordinate is None
+    assert page.items[0].raw["stationName"] == "관악산"
+
+
+def test_erosion_control_dams_returns_place_coordinate(fake_client_factory):
+    payload = public_payload(
+        {"name": "테스트사방댐", "longitude": "127.1", "latitude": "37.2"},
+        total_count=1,
+    )
+    client, _session = fake_client_factory(FakeResponse(payload))
+
+    page = client.safety.erosion_control_dams(num_of_rows=1)
+
+    assert page.items[0].coordinate == PlaceCoordinate(lon=127.1, lat=37.2)
+    assert page.items[0].raw["name"] == "테스트사방댐"
 
 
 def test_iter_pages_uses_page_metadata(fake_client_factory):

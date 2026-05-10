@@ -10,10 +10,19 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 from urllib.parse import urljoin
 
+from pykrtour import PlaceCoordinate
+
 from ._http import ForestHttp, SessionLike
 from .catalog import api_endpoint, api_endpoints, file_dataset, file_datasets
 from .exceptions import ForestAuthError, ForestNoDataError, ForestParseError, ForestRequestError
-from .models import ApiEndpoint, FileDataset, Page, RawRecord
+from .models import (
+    ApiEndpoint,
+    ErosionControlDam,
+    FileDataset,
+    MountainWeather,
+    Page,
+    RawRecord,
+)
 
 DEFAULT_ENV_NAMES = (
     "PYKRFOREST_SERVICE_KEY",
@@ -272,14 +281,16 @@ class TravelNamespace:
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
-    ) -> Page[RawRecord]:
+    ) -> Page[MountainWeather]:
         """국립산림과학원 산악기상 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
-            "mountain_weather",
-            params,
-            page_no=page_no,
-            num_of_rows=num_of_rows,
+        return self._client._page(
+            api_endpoint("mountain_weather"),
+            _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
+            lambda row: MountainWeather(
+                coordinate=PlaceCoordinate.from_mapping(row),
+                raw=row,
+            ),
         )
 
 
@@ -398,14 +409,16 @@ class SafetyNamespace:
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
-    ) -> Page[RawRecord]:
+    ) -> Page[ErosionControlDam]:
         """사방댐 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
-            "erosion_control_dams",
-            params,
-            page_no=page_no,
-            num_of_rows=num_of_rows,
+        return self._client._page(
+            api_endpoint("erosion_control_dams"),
+            _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
+            lambda row: ErosionControlDam(
+                coordinate=PlaceCoordinate.from_mapping(row),
+                raw=row,
+            ),
         )
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pykrtour import PlaceCoordinate
+
 from .catalog import API_ENDPOINTS, FILE_DATASETS, api_endpoints, file_datasets
 from .client import ForestClient, KrForestClient, PyKrForestClient
 from .exceptions import (
@@ -13,13 +15,22 @@ from .exceptions import (
     ForestRequestError,
     ForestServerError,
 )
-from .models import ApiEndpoint, CallContext, FileDataset, Page, RawRecord
+from .models import (
+    ApiEndpoint,
+    CallContext,
+    ErosionControlDam,
+    FileDataset,
+    MountainWeather,
+    Page,
+    RawRecord,
+)
 
 __all__ = [
     "API_ENDPOINTS",
     "FILE_DATASETS",
     "ApiEndpoint",
     "CallContext",
+    "ErosionControlDam",
     "FileDataset",
     "ForestApiError",
     "ForestAuthError",
@@ -30,7 +41,9 @@ __all__ = [
     "ForestRequestError",
     "ForestServerError",
     "KrForestClient",
+    "MountainWeather",
     "Page",
+    "PlaceCoordinate",
     "PyKrForestClient",
     "RawRecord",
     "api_endpoints",
