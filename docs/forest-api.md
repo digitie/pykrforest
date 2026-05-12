@@ -36,8 +36,8 @@ Notes:
   with institution, goods, stay date, and status fields.
 - `client.travel.recreation_forests()` combines the national recreation forest
   promotion, facility, reservation policy, and reservation file datasets into a
-  high-level detail record with `pykrtour.Address` and
-  `pykrtour.PlaceCoordinate`.
+  high-level detail record with `kraddr.base.Address` and
+  `kraddr.base.PlaceCoordinate`.
 
 ## Implemented File Datasets
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from pykrtour import Address, PlaceCoordinate
+from kraddr.base import Address, PlaceCoordinate
 
 from krforest import ForestAuthError, Page
 from krforest.exceptions import ForestNoDataError

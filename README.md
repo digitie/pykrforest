@@ -78,11 +78,11 @@ print(trails.context.provider)
 print(trails.context.request_params)  # service key is removed
 ```
 
-Coordinate- and address-bearing models use `pykrtour` public value objects
+Coordinate- and address-bearing models use `kraddr.base` public value objects
 directly:
 
 ```python
-from pykrtour import Address, PlaceCoordinate
+from kraddr.base import Address, PlaceCoordinate
 
 weather = client.travel.mountain_weather(num_of_rows=1)
 point: PlaceCoordinate | None = weather.items[0].coordinate
@@ -113,7 +113,8 @@ sample = client.files.download("15112801", max_bytes=2048)
 `15112801` is `산림청 국립자연휴양림관리소_숲나들e 숲길 100대명산 정보`.
 `client.travel.recreation_forests()` combines the national recreation forest
 promotion, facility, reservation policy, and reservation file datasets into
-high-level detail records with `pykrtour.Address` and `pykrtour.PlaceCoordinate`.
+high-level detail records with `kraddr.base.Address` and
+`kraddr.base.PlaceCoordinate`.
 
 ## Live Tests
 

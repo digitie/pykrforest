@@ -6,8 +6,8 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Generic, Literal, TypeAlias, TypeVar
 
+from kraddr.base import Address, PlaceCoordinate
 from pydantic import BaseModel, ConfigDict, Field
-from pykrtour import Address, PlaceCoordinate
 
 RawRecord: TypeAlias = Mapping[str, Any]
 Category: TypeAlias = Literal["travel", "safety"]

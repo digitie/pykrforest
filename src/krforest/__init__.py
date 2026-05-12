@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pykrtour import Address, PlaceCoordinate
+from kraddr.base import Address, PlaceCoordinate
 
 from .catalog import API_ENDPOINTS, FILE_DATASETS, api_endpoints, file_datasets
 from .client import ForestClient, KrForestClient, PyKrForestClient

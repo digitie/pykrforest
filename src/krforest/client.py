@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 from urllib.parse import urljoin
 
-from pykrtour import Address, PlaceCoordinate
+from kraddr.base import Address, PlaceCoordinate
 
 from ._convert import strip_or_none
 from ._http import ForestHttp, SessionLike
