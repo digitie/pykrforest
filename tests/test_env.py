@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import pytest
 
-from pykrforest import ForestAuthError, ForestClient
+from krforest import ForestAuthError, ForestClient
 
 from .conftest import FakeResponse, FakeSession, xml_payload
 
 
+def test_from_env_uses_krforest_key(monkeypatch):
+    monkeypatch.setenv("KRFOREST_SERVICE_KEY", "ENV_KEY")
+    session = FakeSession([FakeResponse(text=xml_payload("<item><id>1</id></item>"))])
+
+    client = ForestClient.from_env(session=session)
+    client.travel.forest_services()
+
+    assert session.calls[0]["params"]["ServiceKey"] == "ENV_KEY"
+
+
 def test_from_env_uses_tripmate_fallback(monkeypatch):
+    monkeypatch.delenv("KRFOREST_SERVICE_KEY", raising=False)
     monkeypatch.delenv("PYKRFOREST_SERVICE_KEY", raising=False)
     monkeypatch.delenv("KFS_SERVICE_KEY", raising=False)
     monkeypatch.delenv("FOREST_SERVICE_KEY", raising=False)
@@ -23,6 +34,7 @@ def test_from_env_uses_tripmate_fallback(monkeypatch):
 
 def test_missing_env_raises(monkeypatch):
     for name in (
+        "KRFOREST_SERVICE_KEY",
         "PYKRFOREST_SERVICE_KEY",
         "KFS_SERVICE_KEY",
         "FOREST_SERVICE_KEY",

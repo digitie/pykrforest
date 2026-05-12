@@ -1,4 +1,4 @@
-"""pykrforest가 반환하는 Pydantic 모델."""
+"""krforest가 반환하는 Pydantic 모델."""
 
 from __future__ import annotations
 

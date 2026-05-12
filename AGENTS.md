@@ -1,6 +1,6 @@
 # AGENTS.md
 
-이 문서는 `pykrforest`에서 Codex/agent가 작업할 때 따라야 할 최소 지침입니다.
+이 문서는 `python-krforest-api`에서 Codex/agent가 작업할 때 따라야 할 최소 지침입니다.
 작업 방식은 `pykma`, `pyopinet`, `pykex`의 패턴을 따른다.
 
 ## 우선순위
@@ -17,7 +17,7 @@
 
 ## 프로젝트 기준
 
-- `pykrforest`는 산림청 및 data.go.kr 산림 관련 공개 데이터 중 여행과 안전에
+- `python-krforest-api`는 산림청 및 data.go.kr 산림 관련 공개 데이터 중 여행과 안전에
   직접 관련된 API/파일데이터만 다루는 비공식 Python 클라이언트다.
 - 넓은 생물 표본, 임업경제, 법령해석, 사업자 등록, 행정 통계 데이터는 기본
   범위에서 제외한다.
@@ -29,11 +29,11 @@
 ## 절대 규칙
 
 - API 키를 커밋하지 않는다. `TRIPMATE_DATA_GO_SERVICE_KEY`,
-  `PYKRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`,
+  `KRFOREST_SERVICE_KEY`, `PYKRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`,
   `DATA_GO_SERVICE_KEY`는 로컬 환경변수로만 사용한다.
 - API 키를 로그, fixture, 예외 메시지, repr, 문서에 남기지 않는다.
 - 문서에서 파일 위치를 쓸 때는 프로젝트 루트 기준 상대 경로만 쓴다.
-  예: `pykrforest/client.py`, `docs/forest-api.md`.
+  예: `src/krforest/client.py`, `docs/forest-api.md`.
 - 로컬 절대 경로는 실행 결과 설명에 일시적으로 필요할 때만 쓰고, 저장소 문서에는
   남기지 않는다.
 - Python 내부 문서, 즉 모듈/클래스/함수/메서드 docstring과 설명 주석은 한글로
@@ -46,12 +46,12 @@
 
 ## 모듈 소유권
 
-- `pykrforest/client.py`: 사용자 진입점, 여행/안전/파일데이터 namespace, pagination.
-- `pykrforest/_http.py`: transport, 응답 envelope 정규화, 오류 매핑, 키 마스킹.
-- `pykrforest/_convert.py`: 응답 경계에서 쓰는 작은 변환 helper.
-- `pykrforest/catalog.py`: 구현 대상 API와 파일데이터의 curated catalog.
-- `pykrforest/models.py`: 공개 Pydantic 모델.
-- `pykrforest/exceptions.py`: 예외 계층.
+- `src/krforest/client.py`: 사용자 진입점, 여행/안전/파일데이터 namespace, pagination.
+- `src/krforest/_http.py`: transport, 응답 envelope 정규화, 오류 매핑, 키 마스킹.
+- `src/krforest/_convert.py`: 응답 경계에서 쓰는 작은 변환 helper.
+- `src/krforest/catalog.py`: 구현 대상 API와 파일데이터의 curated catalog.
+- `src/krforest/models.py`: 공개 Pydantic 모델.
+- `src/krforest/exceptions.py`: 예외 계층.
 - `tests/`: 네트워크 없는 단위 테스트와 opt-in live 테스트.
 - `docs/forest-api.md`: 구현 범위와 제외 범위의 기준 문서.
 - `docs/development-notes.md`: 로컬 개발 환경, 반복 이슈, 명령 실행 주의사항.
@@ -88,7 +88,7 @@
 - 불필요한 thin wrapper나 호환 계층을 새로 만들지 않는다. `pykma`, `pyopinet`,
   `pykex` 등 유사 라이브러리에 이미 검증된 구현이 있으면 최소 수정 원칙과
   방향이 다르더라도 필요한 구조와 동작을 직접 적용해 프로젝트 간 일관성을 맞춘다.
-- 다른 라이브러리의 구현을 가져올 때도 `pykrforest`의 여행/안전/파일데이터 범위를
+- 다른 라이브러리의 구현을 가져올 때도 `python-krforest-api`의 여행/안전/파일데이터 범위를
   벗어나는 endpoint나 데이터셋은 함께 추가하지 않는다.
 - 새 endpoint wrapper는 `catalog.py`에 metadata를 먼저 추가하고 `client.py`에서
   namespace 메서드를 제공한다.
@@ -116,16 +116,16 @@
 기본 검증:
 
 ```bash
-python -m compileall pykrforest tests
+python -m compileall src/krforest tests
 python -m pytest
 python -m ruff check .
-python -m mypy pykrforest
+python -m mypy src/krforest
 ```
 
 live 검증은 명시적으로 키를 넣을 때만 수행한다.
 
 ```powershell
-$env:TRIPMATE_DATA_GO_SERVICE_KEY = "..."
+$env:KRFOREST_SERVICE_KEY = "..."
 python -m pytest -m live
 ```
 

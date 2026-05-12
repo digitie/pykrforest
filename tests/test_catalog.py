@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from pykrforest import API_ENDPOINTS, FILE_DATASETS, api_endpoints, file_datasets
-from pykrforest.catalog import api_endpoint, file_dataset
+from krforest import API_ENDPOINTS, FILE_DATASETS, api_endpoints, file_datasets
+from krforest.catalog import api_endpoint, file_dataset
 
 
 def test_catalog_has_travel_and_safety_api_endpoints():

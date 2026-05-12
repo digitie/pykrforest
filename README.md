@@ -1,4 +1,4 @@
-# pykrforest
+# python-krforest-api
 
 Unofficial Python client for Korea Forest Service public data focused on travel
 and safety use cases.
@@ -21,6 +21,7 @@ pip install -e ".[dev]"
 
 Pass a key explicitly or set one of these environment variables:
 
+- `KRFOREST_SERVICE_KEY`
 - `PYKRFOREST_SERVICE_KEY`
 - `KFS_SERVICE_KEY`
 - `FOREST_SERVICE_KEY`
@@ -28,7 +29,7 @@ Pass a key explicitly or set one of these environment variables:
 - `TRIPMATE_DATA_GO_SERVICE_KEY`
 
 ```python
-from pykrforest import ForestClient
+from krforest import ForestClient
 
 client = ForestClient.from_env()
 page = client.travel.forest_services(num_of_rows=1)
@@ -40,7 +41,7 @@ for item in page.items:
 ## API Examples
 
 ```python
-from pykrforest import ForestClient
+from krforest import ForestClient
 
 client = ForestClient("YOUR_DATA_GO_KR_KEY")
 
@@ -117,7 +118,7 @@ high-level detail records with `pykrtour.Address` and `pykrtour.PlaceCoordinate`
 ## Live Tests
 
 ```powershell
-$env:TRIPMATE_DATA_GO_SERVICE_KEY = "..."
+$env:KRFOREST_SERVICE_KEY = "..."
 pytest -m live
 ```
 
@@ -130,7 +131,7 @@ expected authorization xfail instead of hiding it.
 
 프로젝트와 agent 작업 규칙은 `AGENTS.md`에 정리한다. 로컬 개발 환경에서 반복된
 `rg` 권한 문제와 PowerShell UTF-8 출력 문제는 `docs/development-notes.md`를 따른다.
-문서에서 파일 위치를 언급할 때는 `pykrforest/client.py`, `docs/forest-api.md`처럼
+문서에서 파일 위치를 언급할 때는 `src/krforest/client.py`, `docs/forest-api.md`처럼
 프로젝트 루트 기준 상대 경로를 쓴다. Python 내부 문서, 즉 모듈/클래스/함수/메서드
 docstring과 설명 주석은 provider 원문이나 코드 식별자를 보존해야 하는 경우를
 제외하고 한글로 작성한다.

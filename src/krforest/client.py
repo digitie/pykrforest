@@ -30,6 +30,7 @@ from .models import (
 )
 
 DEFAULT_ENV_NAMES = (
+    "KRFOREST_SERVICE_KEY",
     "PYKRFOREST_SERVICE_KEY",
     "KFS_SERVICE_KEY",
     "FOREST_SERVICE_KEY",
@@ -115,9 +116,10 @@ class ForestClient:
     @classmethod
     def from_env(
         cls,
-        name: str = "PYKRFOREST_SERVICE_KEY",
+        name: str = "KRFOREST_SERVICE_KEY",
         *,
         fallback_names: tuple[str, ...] = (
+            "PYKRFOREST_SERVICE_KEY",
             "KFS_SERVICE_KEY",
             "FOREST_SERVICE_KEY",
             "DATA_GO_SERVICE_KEY",

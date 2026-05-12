@@ -4,13 +4,14 @@ import os
 
 import pytest
 
-from pykrforest import ForestAuthError, ForestClient
+from krforest import ForestAuthError, ForestClient
 
 pytestmark = pytest.mark.live
 
 
 def _service_key() -> str:
     for name in (
+        "KRFOREST_SERVICE_KEY",
         "PYKRFOREST_SERVICE_KEY",
         "KFS_SERVICE_KEY",
         "FOREST_SERVICE_KEY",

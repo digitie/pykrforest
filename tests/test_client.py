@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pykrtour import Address, PlaceCoordinate
 
-from pykrforest import ForestAuthError, Page
-from pykrforest.exceptions import ForestNoDataError
+from krforest import ForestAuthError, Page
+from krforest.exceptions import ForestNoDataError
 
 from .conftest import FakeResponse, public_payload, xml_payload
 

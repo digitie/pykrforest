@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from pykrforest import ForestClient
+from krforest import ForestClient
 
 
 class FakeResponse:

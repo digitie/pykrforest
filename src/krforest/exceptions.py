@@ -1,4 +1,4 @@
-"""pykrforest 예외 계층."""
+"""krforest 예외 계층."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any
 
 
 class ForestApiError(Exception):
-    """모든 pykrforest 예외의 기반 클래스."""
+    """모든 krforest 예외의 기반 클래스."""
 
     def __init__(
         self,

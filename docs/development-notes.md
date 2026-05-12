@@ -1,6 +1,6 @@
 # Development Notes
 
-이 문서는 `pykrforest` 로컬 개발 중 반복해서 발생한 환경 이슈와 우회 방법을
+이 문서는 `python-krforest-api` 로컬 개발 중 반복해서 발생한 환경 이슈와 우회 방법을
 기록한다. 경로를 쓸 때는 항상 프로젝트 루트 기준 상대 경로를 사용한다.
 
 ## PowerShell 명령
@@ -16,7 +16,7 @@ Get-ChildItem -Recurse -File
 Get-ChildItem -Recurse -File -Filter *.py
 
 # 텍스트 검색
-Select-String -Path pykrforest\*.py,tests\*.py -Pattern "ForestClient"
+Select-String -Path src\krforest\*.py,tests\*.py -Pattern "ForestClient"
 ```
 
 ## UTF-8 문서 출력
@@ -49,7 +49,7 @@ print(Path("AGENTS.md").read_text(encoding="utf-8")[:200])
 
 ## 문서 작성 기준
 
-- 저장소 문서의 파일 위치 정보는 `pykrforest/client.py`처럼 프로젝트 기준 상대
+- 저장소 문서의 파일 위치 정보는 `src/krforest/client.py`처럼 프로젝트 기준 상대
   경로로 작성한다.
 - Python 내부 문서, 즉 모듈/클래스/함수/메서드 docstring과 설명 주석은 한글로
   작성한다.

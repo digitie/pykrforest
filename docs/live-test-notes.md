@@ -3,7 +3,7 @@
 Run with:
 
 ```powershell
-$env:TRIPMATE_DATA_GO_SERVICE_KEY = "<tripmate key>"
+$env:KRFOREST_SERVICE_KEY = "<data.go.kr key>"
 pytest -m live
 ```
 

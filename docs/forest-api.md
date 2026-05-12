@@ -1,7 +1,7 @@
 # Korea Forest Service Travel and Safety Data Scope
 
 This document records the implemented scope. The initial data.go.kr search for
-`산림청` returned hundreds of datasets; pykrforest narrows that to travel,
+`산림청` returned hundreds of datasets; python-krforest-api narrows that to travel,
 outdoor recreation, wildfire, landslide, and forest safety data.
 
 ## Implemented OpenAPI Endpoints

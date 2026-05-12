@@ -31,7 +31,9 @@ def _load_requests() -> Any:
     try:
         import requests
     except ModuleNotFoundError as exc:  # pragma: no cover
-        raise ForestRequestError("requests is required; install pykrforest dependencies") from exc
+        raise ForestRequestError(
+            "requests is required; install python-krforest-api dependencies"
+        ) from exc
     return requests
 
 
@@ -53,8 +55,8 @@ def _new_session() -> SessionLike:
     session.headers.update(
         {
             "User-Agent": (
-                "Mozilla/5.0 (compatible; pykrforest/0.1; "
-                "+https://github.com/digitie/pykrforest)"
+                "Mozilla/5.0 (compatible; krforest/0.1; "
+                "+https://github.com/digitie/python-krforest-api)"
             )
         }
     )
