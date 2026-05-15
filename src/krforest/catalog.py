@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
-from .models import ApiEndpoint, FileDataset
+from .models import ApiEndpoint, CatalogEntry, FileDataset
 
 DATA_GO_BASE = "https://www.data.go.kr/data"
+DATA_GO_API_ACCOUNT_URL = "https://www.data.go.kr/iim/api/selectAPIAcountView.do"
+FOREST_GO_BASE = "https://www.forest.go.kr"
+FOREST_GO_FILE_DOWNLOAD_URL = f"{FOREST_GO_BASE}/kfsweb/opda/dataMng/fileDown.do"
+FOREST_GO_FILE_DOWNLOAD_POPUP_URL = (
+    f"{FOREST_GO_BASE}/kfsweb/opda/dataMng/fileDownloadPopup.do"
+)
+FOREST_GO_FILE_DOWNLOAD_HISTORY_URL = (
+    f"{FOREST_GO_BASE}/kfsweb/opda/dataMng/insertDownHistory.do"
+)
+FOREST_GO_PERSONAL_PURPOSE_CODE = "3"
 
 
 API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
@@ -105,6 +115,25 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         response_format="xml",
     ),
     ApiEndpoint(
+        key="standard_recreation_forests",
+        title="전국휴양림표준데이터",
+        data_go_id="15013111",
+        categories=("travel",),
+        provider="data.go.kr",
+        service="openapi",
+        operation="tn_pubr_public_rcrfrst_api",
+        url="https://api.data.go.kr/openapi/tn_pubr_public_rcrfrst_api",
+        detail_url=f"{DATA_GO_BASE}/15013111/standard.do",
+        description=(
+            "전국 휴양림의 명칭, 구분, 면적, 수용인원, 입장료, 주소, 좌표, "
+            "관리기관, 연락처, 홈페이지 정보를 조회한다."
+        ),
+        notes="data.go.kr 표준데이터 화면은 활용신청/로그인 흐름으로 이동할 수 있다.",
+        service_key_param="serviceKey",
+        response_format="json",
+        response_type_param="type",
+    ),
+    ApiEndpoint(
         key="wildfire_risk_forecast",
         title="산림청 국립산림과학원_산불위험예보정보",
         data_go_id="15084817",
@@ -194,6 +223,42 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
 
 
 FILE_DATASETS: tuple[FileDataset, ...] = (
+    FileDataset(
+        data_go_id="PBD0000220",
+        title="산림청 유아숲체험원 현황 SHP",
+        categories=("travel",),
+        formats=("SHP", "ZIP"),
+        detail_url=(
+            f"{FOREST_GO_BASE}/kfsweb/kfi/kfs/trail/kidForest.do"
+            "?mn=NKFS_06_08_02&fileDownload=Y&dataType=/kidforest/kidforest.zip"
+            "&pblicDataId=PBD0000220&tabs=3&searchSrvc=&subTitle=&searchWrd=&searchCnd="
+        ),
+        description="전국 유아숲체험원 위치, 이름, 주소, 운영현황을 담은 산림청 SHP 파일.",
+        provider="forest.go.kr",
+        download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=/kidforest/kidforest.zip",
+        download_path="/kidforest/kidforest.zip",
+        source_path="/kfsweb/kfi/kfs/trail/kidForest.do?mn=NKFS_06_08_02",
+        download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
+    ),
+    FileDataset(
+        data_go_id="PBD0000180",
+        title="산림청 휴양림수목원 위치도 SHP",
+        categories=("travel",),
+        formats=("SHP", "ZIP"),
+        detail_url=(
+            f"{FOREST_GO_BASE}/kfsweb/kfi/kfs/trail/huyang.do"
+            "?pblicDataId=PBD0000180&tabs=3&mn=NKFS_06_08_02"
+            "&subTitle=%ed%9c%b4%ec%96%91%eb%a6%bc%c2%b7%ec%88%98%eb%aa%a9%ec%9b%90"
+        ),
+        description=(
+            "전국 휴양림과 수목원 위치, 명칭, 주소, 연락처, 홈페이지를 담은 산림청 SHP 파일."
+        ),
+        provider="forest.go.kr",
+        download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=/huyang/TB_FGDI_FS_HS.zip",
+        download_path="/huyang/TB_FGDI_FS_HS.zip",
+        source_path="/kfsweb/kfi/kfs/trail/huyang.do?mn=NKFS_06_08_02",
+        download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
+    ),
     FileDataset(
         data_go_id="15112801",
         title="산림청 국립자연휴양림관리소_숲나들e 숲길 100대명산 정보",
@@ -431,6 +496,46 @@ def file_datasets(category: str | None = None) -> tuple[FileDataset, ...]:
     return tuple(dataset for dataset in FILE_DATASETS if category in dataset.categories)
 
 
+def api_catalog(category: str | None = None) -> tuple[CatalogEntry, ...]:
+    """디버그 UI 표시용 OpenAPI 카탈로그 항목을 반환한다."""
+
+    return tuple(_endpoint_catalog_entry(endpoint) for endpoint in api_endpoints(category))
+
+
+def file_catalog(category: str | None = None) -> tuple[CatalogEntry, ...]:
+    """디버그 UI 표시용 파일데이터 카탈로그 항목을 반환한다."""
+
+    return tuple(_dataset_catalog_entry(dataset) for dataset in file_datasets(category))
+
+
+def catalog_entries(
+    category: str | None = None,
+    *,
+    include_api: bool = True,
+    include_files: bool = True,
+) -> tuple[CatalogEntry, ...]:
+    """API와 파일데이터를 human-readable 항목으로 묶어 반환한다."""
+
+    entries: list[CatalogEntry] = []
+    if include_api:
+        entries.extend(api_catalog(category))
+    if include_files:
+        entries.extend(file_catalog(category))
+    return tuple(entries)
+
+
+def catalog_entry(key: str) -> CatalogEntry:
+    """endpoint key 또는 data.go.kr id에 해당하는 카탈로그 항목을 반환한다."""
+
+    for endpoint in API_ENDPOINTS:
+        if endpoint.key == key or endpoint.data_go_id == key:
+            return _endpoint_catalog_entry(endpoint)
+    for dataset in FILE_DATASETS:
+        if dataset.data_go_id == key:
+            return _dataset_catalog_entry(dataset)
+    raise KeyError(key)
+
+
 def api_endpoint(key: str) -> ApiEndpoint:
     """key로 API endpoint 하나를 반환한다."""
 
@@ -452,3 +557,47 @@ def file_dataset(data_go_id: str) -> FileDataset:
 def _validate_category(category: str | None) -> None:
     if category is not None and category not in {"travel", "safety"}:
         raise ValueError("category must be 'travel', 'safety', or None")
+
+
+def _endpoint_catalog_entry(endpoint: ApiEndpoint) -> CatalogEntry:
+    return CatalogEntry(
+        kind="api",
+        key=endpoint.key,
+        display_name=endpoint.title,
+        dataset_id=endpoint.data_go_id,
+        dataset_name=endpoint.title,
+        categories=endpoint.categories,
+        provider=endpoint.provider,
+        description=endpoint.description,
+        detail_url=endpoint.detail_url,
+        service_key_url=endpoint.detail_url,
+        service_key_account_url=DATA_GO_API_ACCOUNT_URL
+        if endpoint.provider == "data.go.kr"
+        else None,
+        service=endpoint.service,
+        operation=endpoint.operation,
+        url=endpoint.url,
+        service_key_param=endpoint.service_key_param,
+        response_format=endpoint.response_format,
+        response_type_param=endpoint.response_type_param,
+    )
+
+
+def _dataset_catalog_entry(dataset: FileDataset) -> CatalogEntry:
+    return CatalogEntry(
+        kind="file_dataset",
+        key=dataset.data_go_id,
+        display_name=dataset.title,
+        dataset_id=dataset.data_go_id,
+        dataset_name=dataset.title,
+        categories=dataset.categories,
+        provider=dataset.provider,
+        description=dataset.description,
+        detail_url=dataset.detail_url,
+        service_key_url=None,
+        service_key_account_url=DATA_GO_API_ACCOUNT_URL
+        if dataset.provider == "data.go.kr"
+        else None,
+        url=dataset.download_url,
+        formats=dataset.formats,
+    )

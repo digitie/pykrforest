@@ -1,0 +1,81 @@
+{
+  "name": "reservation_available",
+  "function": "national_recreation_forest_reservations",
+  "description": "국립자연휴양림 예약 가능 상태 fixture replay 예시",
+  "input": {
+    "goods_name": "숲속의집",
+    "start_stay_date": "20240228",
+    "end_stay_date": "20240228"
+  },
+  "request": {
+    "method": "GET",
+    "url": "http://apis.data.go.kr/1400000/nationalRecreationForestReservationService/nationalRecreationForestReservationList",
+    "query": {
+      "goodsNm": "숲속의집",
+      "startStngDt": "20240228",
+      "endStngDt": "20240228"
+    },
+    "headers": {
+      "Accept": "application/xml"
+    }
+  },
+  "response": {
+    "status_code": 200,
+    "headers": {
+      "content-type": "application/xml"
+    },
+    "body": {
+      "items": [
+        {
+          "stngdt": "20240228",
+          "goodsnm": "숲속의집",
+          "insttid": "FR001",
+          "insttnm": "덕유산자연휴양림",
+          "status": "예약가능"
+        }
+      ]
+    }
+  },
+  "parsed": [
+    {
+      "institution_id": "FR001",
+      "institution_name": "덕유산자연휴양림",
+      "goods_name": "숲속의집",
+      "stay_date": "20240228",
+      "status": "예약가능",
+      "raw": {
+        "stngdt": "20240228",
+        "goodsnm": "숲속의집",
+        "insttid": "FR001",
+        "insttnm": "덕유산자연휴양림",
+        "status": "예약가능"
+      }
+    }
+  ],
+  "processed": [
+    {
+      "institution_id": "FR001",
+      "institution_name": "덕유산자연휴양림",
+      "goods_name": "숲속의집",
+      "stay_date": "20240228",
+      "status": "예약가능",
+      "raw": {
+        "stngdt": "20240228",
+        "goodsnm": "숲속의집",
+        "insttid": "FR001",
+        "insttnm": "덕유산자연휴양림",
+        "status": "예약가능"
+      }
+    }
+  ],
+  "assertion": {
+    "mode": "snapshot",
+    "exclude_fields": [],
+    "required_fields": []
+  },
+  "meta": {
+    "created_at": "2026-05-15T20:30:00+09:00",
+    "library_version": "0.1.0",
+    "source": "debug_ui"
+  }
+}

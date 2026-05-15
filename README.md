@@ -7,7 +7,8 @@ The package intentionally excludes broad biology, research, forestry-business,
 and unrelated administrative datasets. It covers:
 
 - travel: forest trails, dulle-gil, Baekdu-daegan trails, famous mountains,
-  mountain weather, recreation forest reservation API, recreation forest details
+  mountain weather, recreation forest reservation API, national recreation forest
+  standard data, recreation forest details, forest.go.kr SHP spatial datasets
 - safety: wildfire risk/statistics, landslide prediction/history, erosion-control
   dams, safety file datasets
 
@@ -59,6 +60,13 @@ reservations = client.travel.recreation_forest_reservations(
     num_of_rows=5,
 )
 
+# National recreation forest standard data. Coordinates and addresses are parsed.
+standard_forests = client.travel.standard_recreation_forests(
+    sido_name="강원특별자치도",
+    accommodation_available=True,
+    num_of_rows=5,
+)
+
 # data.go.kr wildfire endpoint. Some keys need separate approval.
 try:
     fires = client.safety.wildfire_stats(
@@ -93,6 +101,12 @@ print(dams.items[0].coordinate)
 forests = client.travel.recreation_forests(name="덕유산")
 address: Address | None = forests[0].address
 coordinate: PlaceCoordinate | None = forests[0].coordinate
+
+kid_forests = client.travel.kid_forest_centers()
+print(kid_forests[0].address, kid_forests[0].coordinate)
+
+huyang_points = client.travel.recreation_forest_arboretums()
+print(huyang_points[0].name, huyang_points[0].phone_number)
 ```
 
 ## File Datasets
@@ -115,6 +129,69 @@ sample = client.files.download("15112801", max_bytes=2048)
 promotion, facility, reservation policy, and reservation file datasets into
 high-level detail records with `kraddr.base.Address` and
 `kraddr.base.PlaceCoordinate`.
+
+The forest.go.kr SHP entries `PBD0000220` and `PBD0000180` are direct ZIP
+downloads. `client.files.download(...)` opens the download popup flow and submits
+the required purpose as `개인자료용` (`dnldPrps=3`) before fetching the ZIP.
+`client.travel.kid_forest_centers()` and
+`client.travel.recreation_forest_arboretums()` parse those SHP files into
+`ForestSpatialPoint` records with WGS84 `PlaceCoordinate` and `Address` values.
+
+## Debug Fixtures
+
+The library includes Streamlit-free primitives that a separate debug UI can use
+to create replay fixtures. `ForestClient.debug_endpoint()` returns a `DebugRun`
+with input, request, response, parsed result, processed result, trace, and error
+sections. The run also contains `catalog`, a human-readable catalog entry whose
+`dataset_name` and `display_name` are dataset titles, not raw data.go.kr ids.
+`save_fixture()` writes that run into `tests/fixtures/**/*.json` after redacting
+service keys and auth tokens.
+
+```python
+from krforest import ForestClient, save_fixture
+
+client = ForestClient.from_env()
+run = client.debug_endpoint(
+    "national_recreation_forest_reservations",
+    {"goodsNm": "숲속의집"},
+    num_of_rows=1,
+)
+
+save_fixture(
+    base_dir="tests/fixtures",
+    function_name=run.function,
+    case_name="reservation_available",
+    description="예약 가능 상태",
+    input_data=run.input,
+    request_data=run.request,
+    response_data=run.response,
+    parsed_result=run.parsed,
+    processed_result=run.processed,
+)
+```
+
+For a debug UI selector or Debug Trace tab, use the catalog helpers directly:
+
+```python
+from krforest import catalog_entries
+
+catalog_rows = [entry.model_dump(mode="json") for entry in catalog_entries("travel")]
+```
+
+For OpenAPI entries, `service_key_url` points to the data.go.kr detail page used
+for service-key/application access. `service_key_account_url` points to the
+data.go.kr account page for checking issued keys.
+
+Run the bundled development debug UI with Streamlit:
+
+```bash
+pip install -e ".[debug-ui]"
+streamlit run debug_ui/app.py
+```
+
+`tests/test_generated_fixtures.py` replays saved fixtures without calling the
+external API. See `docs/debug-fixtures.md` for the fixture schema and assertion
+modes.
 
 ## Live Tests
 
@@ -148,6 +225,7 @@ The curated scope was checked against public data.go.kr pages, including:
 - https://www.data.go.kr/data/3071170/openapi.do
 - https://www.data.go.kr/data/15084696/openapi.do
 - https://www.data.go.kr/data/15134227/openapi.do
+- https://www.data.go.kr/data/15013111/standard.do
 - https://www.data.go.kr/data/15084817/openapi.do
 - https://www.data.go.kr/data/3070842/openapi.do
 - https://www.data.go.kr/data/15074816/openapi.do
@@ -155,3 +233,5 @@ The curated scope was checked against public data.go.kr pages, including:
 - https://www.data.go.kr/data/15074798/openapi.do
 - https://www.data.go.kr/data/15074812/openapi.do
 - https://www.data.go.kr/data/15074803/openapi.do
+- https://www.forest.go.kr/kfsweb/kfi/kfs/trail/kidForest.do?mn=NKFS_06_08_02
+- https://www.forest.go.kr/kfsweb/kfi/kfs/trail/huyang.do?pblicDataId=PBD0000180&tabs=3&mn=NKFS_06_08_02

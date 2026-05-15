@@ -15,6 +15,7 @@ outdoor recreation, wildfire, landslide, and forest safety data.
 | `famous_mountain_trails` | travel | forest.go.kr | 3071170 | `cultureInfoService/gdTrailInfoImgOpenAPI` |
 | `mountain_weather` | travel, safety | data.go.kr | 15084696 | `1400377/mtweather/mountListSearch` |
 | `national_recreation_forest_reservations` | travel | data.go.kr | 15134227 | `1400000/nationalRecreationForestReservationService/nationalRecreationForestReservationList` |
+| `standard_recreation_forests` | travel | data.go.kr | 15013111 | `openapi/tn_pubr_public_rcrfrst_api` |
 | `wildfire_risk_forecast` | safety | data.go.kr | 15084817 | `1400377/forestPoint/forestPointListGeongugSearch` |
 | `wildfire_stats` | safety | data.go.kr | 3070842 | `1400000/forestStusService/getfirestatsservice` |
 | `past_landslides` | safety | data.go.kr | 15074816 | `1400000/pastLndslInfoService/pastLndslInfoList` |
@@ -34,15 +35,26 @@ Notes:
 - `national_recreation_forest_reservations` uses the official
   `serviceKey` query parameter name and returns XML reservation status items
   with institution, goods, stay date, and status fields.
+- `standard_recreation_forests` uses the standard data endpoint
+  `https://api.data.go.kr/openapi/tn_pubr_public_rcrfrst_api`, the official
+  `serviceKey` parameter, and `type=json`. The detail page may redirect through
+  the data.go.kr login/application flow.
 - `client.travel.recreation_forests()` combines the national recreation forest
   promotion, facility, reservation policy, and reservation file datasets into a
   high-level detail record with `kraddr.base.Address` and
+  `kraddr.base.PlaceCoordinate`.
+- `client.travel.kid_forest_centers()` and
+  `client.travel.recreation_forest_arboretums()` download forest.go.kr SHP ZIP
+  files, submit the popup purpose as `개인자료용` (`dnldPrps=3`), and return
+  `ForestSpatialPoint` records with `kraddr.base.Address` and transformed WGS84
   `kraddr.base.PlaceCoordinate`.
 
 ## Implemented File Datasets
 
 | data.go.kr | Category | Format | Dataset |
 | --- | --- | --- | --- |
+| PBD0000220 | travel | SHP, ZIP | 산림청 유아숲체험원 현황 SHP |
+| PBD0000180 | travel | SHP, ZIP | 산림청 휴양림수목원 위치도 SHP |
 | 15112801 | travel | CSV | 산림청 국립자연휴양림관리소_숲나들e 숲길 100대명산 정보 |
 | 3034022 | travel | SHP | 산림청_등산로(산림문화·휴양정보) |
 | 3034163 | travel | SHP | 산림청_숲길(산림문화·휴양정보) |

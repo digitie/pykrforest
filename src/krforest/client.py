@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import io
 import json
 import os
 import re
@@ -12,22 +10,53 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 from urllib.parse import urljoin
 
-from kraddr.base import Address, PlaceCoordinate
-
-from ._convert import strip_or_none
 from ._http import ForestHttp, SessionLike
-from .catalog import api_endpoint, api_endpoints, file_dataset, file_datasets
-from .exceptions import ForestAuthError, ForestNoDataError, ForestParseError, ForestRequestError
+from .catalog import (
+    FOREST_GO_FILE_DOWNLOAD_HISTORY_URL,
+    FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
+    api_endpoint,
+    api_endpoints,
+    catalog_entries,
+    catalog_entry,
+    file_dataset,
+    file_datasets,
+)
+from .debug import DebugRun, jsonable, redact_sensitive
+from .exceptions import (
+    ForestApiError,
+    ForestAuthError,
+    ForestNoDataError,
+    ForestParseError,
+    ForestRequestError,
+)
 from .models import (
     ApiEndpoint,
+    CatalogEntry,
     ErosionControlDam,
     FileDataset,
+    ForestSpatialPoint,
     MountainWeather,
     Page,
     RawRecord,
     RecreationForest,
     RecreationForestReservation,
+    StandardRecreationForest,
 )
+from .parser import (
+    parse_erosion_control_dam,
+    parse_mountain_weather,
+    parse_recreation_forest_reservation,
+    parse_standard_recreation_forest,
+)
+from .processor import (
+    RECREATION_FOREST_FACILITY_ID,
+    RECREATION_FOREST_POLICY_ID,
+    RECREATION_FOREST_PROMOTION_ID,
+    RECREATION_FOREST_RESERVATION_FILE_ID,
+    build_recreation_forests,
+    csv_records,
+)
+from .spatial import forest_spatial_points
 
 DEFAULT_ENV_NAMES = (
     "KRFOREST_SERVICE_KEY",
@@ -38,40 +67,6 @@ DEFAULT_ENV_NAMES = (
     "TRIPMATE_DATA_GO_SERVICE_KEY",
 )
 T = TypeVar("T")
-
-_RECREATION_FOREST_PROMOTION_ID = "15064415"
-_RECREATION_FOREST_FACILITY_ID = "15064419"
-_RECREATION_FOREST_POLICY_ID = "15064416"
-_RECREATION_FOREST_RESERVATION_FILE_ID = "15064418"
-
-_INSTITUTION_ID_KEYS = (
-    "institution_id",
-    "insttId",
-    "insttid",
-    "기관ID",
-    "기관아이디",
-    "기관코드",
-    "휴양림ID",
-)
-_INSTITUTION_NAME_KEYS = (
-    "institution_name",
-    "insttNm",
-    "insttnm",
-    "기관명",
-    "휴양림명",
-    "자연휴양림명",
-    "명칭",
-)
-_GOODS_NAME_KEYS = ("goodsNm", "goodsnm", "상품명", "객실명", "시설명")
-_STAY_DATE_KEYS = ("stngDt", "stngdt", "숙박일자", "이용일자")
-_STATUS_KEYS = ("status", "상태", "예약상태")
-_PHONE_KEYS = ("phone_number", "전화번호", "대표전화번호", "연락처", "tel", "telNo")
-_CAPACITY_KEYS = ("capacity", "최대수용인원", "수용인원", "정원")
-_OPERATION_TIME_KEYS = ("operation_time", "운영시간", "이용시간")
-_HOMEPAGE_KEYS = ("homepage_url", "홈페이지", "홈페이지주소", "url", "URL")
-_REGION_KEYS = ("region", "지역", "시도", "시군구")
-_DESCRIPTION_KEYS = ("description", "설명", "소개", "개요", "내용")
-_EXTRA_ADDRESS_KEYS = ("소재지도로명주소", "기본주소", "주소지")
 
 
 class ForestClient:
@@ -94,7 +89,7 @@ class ForestClient:
         session: SessionLike | None = None,
         service_key_param: str = "ServiceKey",
     ) -> None:
-        key = service_key or _first_env(DEFAULT_ENV_NAMES)
+        key = _normalize_service_key(service_key) or _first_env(DEFAULT_ENV_NAMES)
         if not key:
             names = ", ".join(DEFAULT_ENV_NAMES)
             raise ForestAuthError(
@@ -143,6 +138,11 @@ class ForestClient:
 
         return file_datasets(category)
 
+    def catalog(self, category: str | None = None) -> tuple[CatalogEntry, ...]:
+        """디버그 UI와 선택 목록에 쓸 human-readable 카탈로그를 반환한다."""
+
+        return catalog_entries(category)
+
     def raw_endpoint(
         self,
         endpoint_key: str,
@@ -159,6 +159,123 @@ class ForestClient:
             endpoint,
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
             lambda row: row,
+            response_format=response_format,
+        )
+
+    def debug_endpoint(
+        self,
+        endpoint_key: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        page_no: int = 1,
+        num_of_rows: int = 10,
+        response_format: str | None = None,
+    ) -> DebugRun:
+        """디버그 UI가 사용할 수 있는 endpoint replay용 실행 결과를 반환한다."""
+
+        endpoint = api_endpoint(endpoint_key)
+        fmt = response_format or endpoint.response_format or (
+            "json" if endpoint.provider == "data.go.kr" else "xml"
+        )
+        trace = [
+            f"endpoint={endpoint.key}",
+            f"provider={endpoint.provider}",
+            f"response_format={fmt}",
+        ]
+        entry = catalog_entry(endpoint.key)
+        input_data = {
+            "endpoint_key": endpoint_key,
+            "params": dict(params or {}),
+            "page_no": page_no,
+            "num_of_rows": num_of_rows,
+            "response_format": response_format,
+        }
+        request: dict[str, Any] = {}
+        try:
+            query = _page_params(params, page_no=page_no, num_of_rows=num_of_rows)
+            request = {
+                "method": "GET",
+                "url": endpoint.url,
+                "query": {key: value for key, value in query.items() if value is not None},
+                "headers": {"Accept": "application/json" if fmt == "json" else "application/xml"},
+            }
+            page = self.raw_endpoint(
+                endpoint_key,
+                params,
+                page_no=page_no,
+                num_of_rows=num_of_rows,
+                response_format=response_format,
+            )
+        except ForestApiError as exc:
+            trace.append("failed")
+            return DebugRun(
+                function=endpoint.key,
+                input=redact_sensitive(jsonable(input_data)),
+                request=redact_sensitive(jsonable(request)),
+                response={},
+                parsed=None,
+                processed=None,
+                trace=trace,
+                catalog=jsonable(entry),
+                error={
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                    "metadata": redact_sensitive(jsonable(exc.metadata)),
+                },
+            )
+        except Exception as exc:
+            trace.append("failed")
+            return DebugRun(
+                function=endpoint.key,
+                input=redact_sensitive(jsonable(input_data)),
+                request=redact_sensitive(jsonable(request)),
+                response={},
+                parsed=None,
+                processed=None,
+                trace=trace,
+                catalog=jsonable(entry),
+                error={
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                    "metadata": {},
+                },
+            )
+
+        trace.append("success")
+        request["url"] = page.context.request_url or endpoint.url
+        request["query"] = dict(page.context.request_params)
+        response = {
+            "status_code": 200,
+            "headers": {},
+            "body": page.raw,
+        }
+        return DebugRun(
+            function=endpoint.key,
+            input=redact_sensitive(jsonable(input_data)),
+            request=redact_sensitive(jsonable(request)),
+            response=redact_sensitive(jsonable(response)),
+            parsed=page,
+            processed=page,
+            trace=trace,
+            catalog=jsonable(entry),
+        )
+
+    def debug_raw_endpoint(
+        self,
+        endpoint_key: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        page_no: int = 1,
+        num_of_rows: int = 10,
+        response_format: str | None = None,
+    ) -> DebugRun:
+        """기존 명칭과 명확성을 위한 raw endpoint 디버그 alias."""
+
+        return self.debug_endpoint(
+            endpoint_key,
+            params,
+            page_no=page_no,
+            num_of_rows=num_of_rows,
             response_format=response_format,
         )
 
@@ -210,6 +327,7 @@ class ForestClient:
             endpoint=endpoint.operation,
             response_format=fmt,
             service_key_param=endpoint.service_key_param,
+            response_type_param=endpoint.response_type_param,
         )
         parsed: list[T] = []
         for row in payload.items:
@@ -331,10 +449,7 @@ class TravelNamespace:
         return self._client._page(
             api_endpoint("mountain_weather"),
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
-            lambda row: MountainWeather(
-                coordinate=PlaceCoordinate.from_mapping(row),
-                raw=row,
-            ),
+            parse_mountain_weather,
         )
 
     def recreation_forest_reservations(
@@ -356,9 +471,55 @@ class TravelNamespace:
         return self._client._page(
             api_endpoint("national_recreation_forest_reservations"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
-            _parse_recreation_forest_reservation,
+            parse_recreation_forest_reservation,
             response_format="xml",
         )
+
+    def standard_recreation_forests(
+        self,
+        *,
+        name: str | None = None,
+        sido_name: str | None = None,
+        forest_type: str | None = None,
+        accommodation_available: str | bool | None = None,
+        page_no: int = 1,
+        num_of_rows: int = 10,
+        **params: Any,
+    ) -> Page[StandardRecreationForest]:
+        """전국휴양림표준데이터 OpenAPI 레코드를 주소와 좌표 포함 모델로 조회한다."""
+
+        query = dict(params)
+        query["rcrfrstNm"] = name
+        query["ctprvnNm"] = sido_name
+        query["rcrfrstType"] = forest_type
+        query["stayngPosblYn"] = _yn_value(accommodation_available)
+        return self._client._page(
+            api_endpoint("standard_recreation_forests"),
+            _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            parse_standard_recreation_forest,
+        )
+
+    def kid_forest_centers(
+        self,
+        *,
+        name: str | None = None,
+    ) -> tuple[ForestSpatialPoint, ...]:
+        """산림청 유아숲체험원 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
+
+        dataset = file_dataset("PBD0000220")
+        data = self._client.files.download(dataset.data_go_id)
+        return forest_spatial_points(data, dataset, name=name)
+
+    def recreation_forest_arboretums(
+        self,
+        *,
+        name: str | None = None,
+    ) -> tuple[ForestSpatialPoint, ...]:
+        """산림청 휴양림수목원 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
+
+        dataset = file_dataset("PBD0000180")
+        data = self._client.files.download(dataset.data_go_id)
+        return forest_spatial_points(data, dataset, name=name)
 
     def recreation_forests(
         self,
@@ -368,15 +529,15 @@ class TravelNamespace:
     ) -> tuple[RecreationForest, ...]:
         """휴양림 파일데이터를 조합해 위치, 주소, 시설, 예약 상세정보를 반환한다."""
 
-        promotion_rows = _csv_records(
-            self._client.files.download(_RECREATION_FOREST_PROMOTION_ID)
+        promotion_rows = csv_records(
+            self._client.files.download(RECREATION_FOREST_PROMOTION_ID)
         )
-        facility_rows = _csv_records(self._client.files.download(_RECREATION_FOREST_FACILITY_ID))
-        policy_rows = _csv_records(self._client.files.download(_RECREATION_FOREST_POLICY_ID))
-        reservation_rows = _csv_records(
-            self._client.files.download(_RECREATION_FOREST_RESERVATION_FILE_ID)
+        facility_rows = csv_records(self._client.files.download(RECREATION_FOREST_FACILITY_ID))
+        policy_rows = csv_records(self._client.files.download(RECREATION_FOREST_POLICY_ID))
+        reservation_rows = csv_records(
+            self._client.files.download(RECREATION_FOREST_RESERVATION_FILE_ID)
         )
-        return _build_recreation_forests(
+        return build_recreation_forests(
             promotion_rows,
             facility_rows,
             policy_rows,
@@ -507,10 +668,7 @@ class SafetyNamespace:
         return self._client._page(
             api_endpoint("erosion_control_dams"),
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
-            lambda row: ErosionControlDam(
-                coordinate=PlaceCoordinate.from_mapping(row),
-                raw=row,
-            ),
+            parse_erosion_control_dam,
         )
 
 
@@ -532,6 +690,15 @@ class FileDataNamespace:
         """상세 페이지에서 data.go.kr 직접 파일 다운로드 URL을 찾는다."""
 
         dataset = file_dataset(data_go_id)
+        if dataset.provider == "forest.go.kr":
+            if dataset.download_url is None:
+                raise ForestNoDataError(
+                    "forest.go.kr file dataset does not define a download URL",
+                    provider=dataset.provider,
+                    endpoint=dataset.detail_url,
+                    failure_kind="no_data",
+                )
+            return dataset.download_url
         response = _get_detail_page(
             self._client._http.session,
             dataset.detail_url,
@@ -558,8 +725,20 @@ class FileDataNamespace:
     def download(self, data_go_id: str, *, max_bytes: int | None = None) -> bytes:
         """정리된 파일데이터를 다운로드해 bytes로 반환한다."""
 
+        dataset = file_dataset(data_go_id)
+        if dataset.provider == "forest.go.kr":
+            _submit_forest_go_download_history(
+                self._client._http.session,
+                dataset,
+                timeout=self._client.timeout,
+            )
         url = self.download_url(data_go_id)
-        return self._client._http.get_bytes(url, max_bytes=max_bytes)
+        return self._client._http.get_bytes(
+            url,
+            max_bytes=max_bytes,
+            provider=dataset.provider,
+            endpoint=dataset.data_go_id,
+        )
 
 
 KrForestClient = ForestClient
@@ -568,10 +747,17 @@ PyKrForestClient = ForestClient
 
 def _first_env(names: tuple[str, ...]) -> str | None:
     for name in names:
-        value = os.getenv(name)
+        value = _normalize_service_key(os.getenv(name))
         if value:
             return value
     return None
+
+
+def _normalize_service_key(value: str | None) -> str | None:
+    if value is None:
+        return None
+    key = "".join(str(value).split())
+    return key or None
 
 
 def _page_params(
@@ -590,216 +776,102 @@ def _page_params(
     return query
 
 
-def _parse_recreation_forest_reservation(row: dict[str, Any]) -> RecreationForestReservation:
-    return RecreationForestReservation(
-        institution_id=_first_text(row, *_INSTITUTION_ID_KEYS),
-        institution_name=_first_text(row, *_INSTITUTION_NAME_KEYS),
-        goods_name=_first_text(row, *_GOODS_NAME_KEYS),
-        stay_date=_first_text(row, *_STAY_DATE_KEYS),
-        status=_first_text(row, *_STATUS_KEYS),
-        raw=row,
-    )
+def _yn_value(value: str | bool | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "Y" if value else "N"
+    return value
 
 
-def _build_recreation_forests(
-    promotion_rows: tuple[dict[str, str], ...],
-    facility_rows: tuple[dict[str, str], ...],
-    policy_rows: tuple[dict[str, str], ...],
-    reservation_rows: tuple[dict[str, str], ...],
+def _submit_forest_go_download_history(
+    session: SessionLike,
+    dataset: FileDataset,
     *,
-    name: str | None,
-    institution_id: str | None,
-) -> tuple[RecreationForest, ...]:
-    facility_index = _index_rows(facility_rows)
-    policy_index = _index_rows(policy_rows)
-    reservation_index = _index_rows(reservation_rows)
-    forests: list[RecreationForest] = []
-    name_filter = strip_or_none(name)
-    institution_filter = strip_or_none(institution_id)
+    timeout: float,
+) -> None:
+    if dataset.download_path is None or dataset.source_path is None:
+        return
 
-    for base_row in _recreation_forest_base_rows(
-        promotion_rows,
-        facility_rows,
-        policy_rows,
-        reservation_rows,
-    ):
-        forest_id = _first_text(base_row, *_INSTITUTION_ID_KEYS)
-        forest_name = _first_text(base_row, *_INSTITUTION_NAME_KEYS)
-        if institution_filter is not None and forest_id != institution_filter:
-            continue
-        if name_filter is not None and name_filter not in (forest_name or ""):
-            continue
-
-        facilities = _lookup_rows(facility_index, forest_id=forest_id, name=forest_name)
-        policies = _lookup_rows(policy_index, forest_id=forest_id, name=forest_name)
-        reservations = _lookup_rows(reservation_index, forest_id=forest_id, name=forest_name)
-        detail_rows: tuple[Mapping[str, Any], ...] = (base_row, *facilities)
-
-        address = Address.from_mapping(base_row)
-        if address is None:
-            text = _first_text(base_row, *_EXTRA_ADDRESS_KEYS)
-            address = Address.from_text(text) if text is not None else None
-        if address is None:
-            for row in facilities:
-                address = Address.from_mapping(row)
-                if address is None:
-                    text = _first_text(row, *_EXTRA_ADDRESS_KEYS)
-                    address = Address.from_text(text) if text is not None else None
-                if address is not None:
-                    break
-
-        coordinate = PlaceCoordinate.from_mapping(base_row)
-        if coordinate is None:
-            for row in facilities:
-                coordinate = PlaceCoordinate.from_mapping(row)
-                if coordinate is not None:
-                    break
-
-        forests.append(
-            RecreationForest(
-                institution_id=forest_id,
-                name=forest_name,
-                coordinate=coordinate,
-                address=address,
-                phone_number=_first_text_from_rows(detail_rows, *_PHONE_KEYS),
-                capacity=_first_text_from_rows(detail_rows, *_CAPACITY_KEYS),
-                operation_time=_first_text_from_rows(detail_rows, *_OPERATION_TIME_KEYS),
-                homepage_url=_first_text_from_rows(detail_rows, *_HOMEPAGE_KEYS),
-                region=_first_text_from_rows(detail_rows, *_REGION_KEYS),
-                description=_first_text_from_rows(detail_rows, *_DESCRIPTION_KEYS),
-                facilities=facilities,
-                reservation_policies=policies,
-                reservation_records=tuple(
-                    _parse_recreation_forest_reservation(dict(row)) for row in reservations
-                ),
-                raw={
-                    "promotion": base_row,
-                    "facilities": facilities,
-                    "reservation_policies": policies,
-                    "reservation_file_records": reservations,
-                },
-            )
+    popup_params = {
+        "pblicDataId": dataset.data_go_id,
+        "tabs": "3",
+        "searchSrvc": "",
+        "subTitle": "",
+        "fileNum": dataset.download_path,
+        "url": dataset.source_path,
+    }
+    try:
+        popup = _forest_go_request_with_retry(
+            lambda: session.get(
+                FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
+                params=popup_params,
+                timeout=timeout,
+            ),
+            dataset=dataset,
+            endpoint=FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
         )
-    return tuple(forests)
+    except ForestRequestError:
+        raise
+    if int(popup.status_code) >= 400:
+        raise ForestRequestError(
+            f"HTTP {popup.status_code}: {popup.text[:200]}",
+            provider=dataset.provider,
+            endpoint=FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
+            status_code=int(popup.status_code),
+            failure_kind="request",
+        )
 
-
-def _csv_records(data: bytes) -> tuple[dict[str, str], ...]:
-    text = _decode_csv_text(data)
-    if not text.strip():
-        return ()
-    reader = csv.DictReader(io.StringIO(text))
-    if reader.fieldnames is None:
-        return ()
-    records: list[dict[str, str]] = []
-    for row in reader:
-        record: dict[str, str] = {}
-        for key, value in row.items():
-            if key is None:
-                continue
-            clean_key = key.strip()
-            clean_value = strip_or_none(value)
-            if clean_key and clean_value is not None:
-                record[clean_key] = clean_value
-        if record:
-            records.append(record)
-    return tuple(records)
-
-
-def _decode_csv_text(data: bytes) -> str:
-    for encoding in ("utf-8-sig", "cp949"):
-        try:
-            return data.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    raise ForestParseError(
-        "CSV file dataset encoding is neither UTF-8 nor CP949",
-        provider="data.go.kr",
-        failure_kind="parse",
+    history_data = {
+            "dataType": dataset.download_path,
+            "url": dataset.source_path,
+            "pblicDataId": dataset.data_go_id,
+            "tabs": "3",
+            "searchSrvc": "",
+            "searchWrd": "",
+            "searchCnd": "",
+            "dnldPrps": dataset.download_purpose_code or "3",
+            "dnldDetlPrps": "",
+            "useAgree01": "Y",
+    }
+    response = _forest_go_request_with_retry(
+        lambda: session.post(
+            FOREST_GO_FILE_DOWNLOAD_HISTORY_URL,
+            data=history_data,
+            timeout=timeout,
+            allow_redirects=False,
+        ),
+        dataset=dataset,
+        endpoint=FOREST_GO_FILE_DOWNLOAD_HISTORY_URL,
     )
+    if int(response.status_code) >= 400:
+        raise ForestRequestError(
+            f"HTTP {response.status_code}: {response.text[:200]}",
+            provider=dataset.provider,
+            endpoint=FOREST_GO_FILE_DOWNLOAD_HISTORY_URL,
+            status_code=int(response.status_code),
+            failure_kind="request",
+        )
 
 
-def _recreation_forest_base_rows(
-    promotion_rows: tuple[dict[str, str], ...],
-    facility_rows: tuple[dict[str, str], ...],
-    policy_rows: tuple[dict[str, str], ...],
-    reservation_rows: tuple[dict[str, str], ...],
-) -> tuple[dict[str, str], ...]:
-    seen: set[str] = set()
-    rows: list[dict[str, str]] = []
-    for row in (*promotion_rows, *facility_rows, *policy_rows, *reservation_rows):
-        keys = _forest_index_keys(row)
-        if not keys:
-            continue
-        if seen.intersection(keys):
-            continue
-        seen.update(keys)
-        rows.append(row)
-    return tuple(rows)
-
-
-def _index_rows(rows: tuple[dict[str, str], ...]) -> dict[str, tuple[dict[str, str], ...]]:
-    groups: dict[str, list[dict[str, str]]] = {}
-    for row in rows:
-        for key in _forest_index_keys(row):
-            groups.setdefault(key, []).append(row)
-    return {key: tuple(value) for key, value in groups.items()}
-
-
-def _lookup_rows(
-    index: Mapping[str, tuple[dict[str, str], ...]],
+def _forest_go_request_with_retry(
+    request: Callable[[], Any],
     *,
-    forest_id: str | None,
-    name: str | None,
-) -> tuple[dict[str, str], ...]:
-    keys: list[str] = []
-    if forest_id:
-        keys.append(f"id:{forest_id}")
-    if name:
-        keys.append(f"name:{name}")
-    rows: list[dict[str, str]] = []
-    seen: set[int] = set()
-    for key in keys:
-        for row in index.get(key, ()):
-            identity = id(row)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            rows.append(row)
-    return tuple(rows)
-
-
-def _forest_index_keys(row: Mapping[str, Any]) -> tuple[str, ...]:
-    keys: list[str] = []
-    forest_id = _first_text(row, *_INSTITUTION_ID_KEYS)
-    forest_name = _first_text(row, *_INSTITUTION_NAME_KEYS)
-    if forest_id is not None:
-        keys.append(f"id:{forest_id}")
-    if forest_name is not None:
-        keys.append(f"name:{forest_name}")
-    return tuple(keys)
-
-
-def _first_text_from_rows(rows: tuple[Mapping[str, Any], ...], *keys: str) -> str | None:
-    for row in rows:
-        value = _first_text(row, *keys)
-        if value is not None:
-            return value
-    return None
-
-
-def _first_text(row: Mapping[str, Any], *keys: str) -> str | None:
-    lower_key_map = {str(key).lower(): key for key in row}
-    for key in keys:
-        value = strip_or_none(row.get(key))
-        if value is not None:
-            return value
-        actual_key = lower_key_map.get(key.lower())
-        if actual_key is None:
-            continue
-        value = strip_or_none(row.get(actual_key))
-        if value is not None:
-            return value
-    return None
+    dataset: FileDataset,
+    endpoint: str,
+) -> Any:
+    last_exc: Exception | None = None
+    for _ in range(3):
+        try:
+            return request()
+        except Exception as exc:  # pragma: no cover - network-dependent
+            last_exc = exc
+    raise ForestRequestError(
+        f"forest.go.kr request failed: {last_exc}",
+        provider=dataset.provider,
+        endpoint=endpoint,
+        failure_kind="network",
+    )
 
 
 def _extract_download_url(html: str, *, base_url: str) -> str:

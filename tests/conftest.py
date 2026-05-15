@@ -46,6 +46,12 @@ class FakeSession:
             raise AssertionError("no fake response left")
         return self.responses.pop(0)
 
+    def post(self, url: str, **kwargs: Any) -> FakeResponse:
+        self.calls.append({"method": "POST", "url": url, **kwargs})
+        if not self.responses:
+            raise AssertionError("no fake response left")
+        return self.responses.pop(0)
+
 
 def public_payload(
     item: Any,

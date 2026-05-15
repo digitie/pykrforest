@@ -48,6 +48,8 @@ class ResponseLike(Protocol):
 class SessionLike(Protocol):
     def get(self, url: str, **kwargs: Any) -> ResponseLike: ...
 
+    def post(self, url: str, **kwargs: Any) -> ResponseLike: ...
+
 
 def _new_session() -> SessionLike:
     requests = _load_requests()
@@ -85,6 +87,7 @@ class ForestHttp:
         session: SessionLike | None = None,
         service_key_param: str = "ServiceKey",
     ) -> None:
+        service_key = "".join(str(service_key).split())
         if not service_key:
             raise ForestAuthError("service_key is required", failure_kind="auth")
         if not service_key_param:
@@ -103,11 +106,12 @@ class ForestHttp:
         endpoint: str,
         response_format: str = "xml",
         service_key_param: str | None = None,
+        response_type_param: str | None = None,
     ) -> NormalizedPayload:
         key_param = service_key_param or self.service_key_param
         query: dict[str, Any] = {key_param: self.service_key}
         if provider == "data.go.kr" and response_format.lower() == "json":
-            query["_type"] = "json"
+            query[response_type_param or "_type"] = "json"
         if params:
             query.update(params)
 
@@ -141,12 +145,19 @@ class ForestHttp:
             context=safe_context,
         )
 
-    def get_bytes(self, url: str, *, max_bytes: int | None = None) -> bytes:
+    def get_bytes(
+        self,
+        url: str,
+        *,
+        max_bytes: int | None = None,
+        provider: str = "data.go.kr",
+        endpoint: str | None = None,
+    ) -> bytes:
         response = self.session.get(url, timeout=self.timeout)
         _raise_for_status(
             response,
-            provider="data.go.kr",
-            endpoint=url,
+            provider=provider,
+            endpoint=endpoint or url,
             service_key=self.service_key,
             params={},
         )

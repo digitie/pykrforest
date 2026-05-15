@@ -54,3 +54,15 @@ print(Path("AGENTS.md").read_text(encoding="utf-8")[:200])
 - Python 내부 문서, 즉 모듈/클래스/함수/메서드 docstring과 설명 주석은 한글로
   작성한다.
 - provider 원문, API 필드명, 코드 식별자는 원문을 보존한다.
+
+## Debug UI와 Fixture
+
+- Streamlit 디버그 UI는 별도 프로젝트에서 구현하고, 이 라이브러리는 Streamlit에
+  의존하지 않는다.
+- UI가 필요한 실행 정보는 `ForestClient.debug_endpoint()`와 `src/krforest/debug.py`의
+  `DebugRun`으로 전달한다.
+- fixture는 `tests/fixtures/{function_name}/{case_name}.json`에 저장하고,
+  `tests/test_generated_fixtures.py`가 외부 API 호출 없이 replay한다.
+- fixture 저장 전에는 `save_fixture()` 또는 `redact_sensitive()`를 거쳐 서비스키,
+  Authorization header, access token, refresh token을 제거한다.
+- assertion mode와 fixture schema는 `docs/debug-fixtures.md`에 정리한다.

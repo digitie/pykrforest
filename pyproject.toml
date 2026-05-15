@@ -25,6 +25,8 @@ classifiers = [
 ]
 dependencies = [
   "pydantic>=2.7",
+  "pyproj>=3.6",
+  "pyshp>=2.3",
   "python-kraddr-base>=0.1.5",
   "requests>=2.31",
 ]
@@ -37,6 +39,10 @@ dev = [
   "ruff>=0.5",
   "mypy>=1.10",
   "types-requests>=2.31",
+]
+debug-ui = [
+  "pandas>=2",
+  "streamlit>=1.36",
 ]
 
 [tool.setuptools.package-dir]

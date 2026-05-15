@@ -8,7 +8,7 @@ from .conftest import FakeResponse, FakeSession, xml_payload
 
 
 def test_from_env_uses_krforest_key(monkeypatch):
-    monkeypatch.setenv("KRFOREST_SERVICE_KEY", "ENV_KEY")
+    monkeypatch.setenv("KRFOREST_SERVICE_KEY", " \n ENV _KEY \t")
     session = FakeSession([FakeResponse(text=xml_payload("<item><id>1</id></item>"))])
 
     client = ForestClient.from_env(session=session)
@@ -30,6 +30,15 @@ def test_from_env_uses_tripmate_fallback(monkeypatch):
     client.travel.forest_services()
 
     assert session.calls[0]["params"]["ServiceKey"] == "ENV_KEY"
+
+
+def test_explicit_service_key_copy_paste_whitespace_is_removed():
+    session = FakeSession([FakeResponse(text=xml_payload("<item><id>1</id></item>"))])
+
+    client = ForestClient(" \r\n TEST _KEY \t", session=session)
+    client.travel.forest_services()
+
+    assert session.calls[0]["params"]["ServiceKey"] == "TEST_KEY"
 
 
 def test_missing_env_raises(monkeypatch):

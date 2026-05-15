@@ -8,6 +8,16 @@ from krforest.exceptions import ForestNoDataError
 
 from .conftest import FakeResponse, public_payload, xml_payload
 
+KOREA_2000_UNIFIED_WKT = (
+    'PROJCS["Korea_2000_Unified_CS",GEOGCS["GCS_Korea 2000",'
+    'DATUM["D_Korea_2000",SPHEROID["GRS_1980",6378137,298.257222101]],'
+    'PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]],'
+    'PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",38],'
+    'PARAMETER["central_meridian",127.5],PARAMETER["scale_factor",0.9996],'
+    'PARAMETER["false_easting",1000000],PARAMETER["false_northing",2000000],'
+    'UNIT["Meter",1]]'
+)
+
 
 def download_html(name: str) -> str:
     return f"""
@@ -18,6 +28,28 @@ def download_html(name: str) -> str:
       </script>
     </head></html>
     """
+
+
+def shp_zip(tmp_path) -> bytes:
+    import zipfile
+
+    import shapefile
+
+    base = tmp_path / "kidforest"
+    writer = shapefile.Writer(str(base), shapeType=shapefile.POINT, encoding="cp949")
+    writer.field("이름", "C", size=80)
+    writer.field("주소", "C", size=120)
+    writer.field("운영현황", "C", size=40)
+    writer.point(953901.165, 1952032.08)
+    writer.record("테스트 유아숲체험원", "서울특별시 중구 세종대로 110", "운영")
+    writer.close()
+    base.with_suffix(".prj").write_text(KOREA_2000_UNIFIED_WKT, encoding="ascii")
+
+    archive_path = tmp_path / "kidforest.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for suffix in (".shp", ".shx", ".dbf", ".prj"):
+            archive.write(base.with_suffix(suffix), arcname=f"kidforest{suffix}")
+    return archive_path.read_bytes()
 
 
 def test_legacy_xml_endpoint_sends_service_key_and_parses_page(fake_client_factory):
@@ -65,6 +97,51 @@ def test_data_go_json_endpoint_adds_type_and_parses_items(fake_client_factory):
     assert "ServiceKey" not in page.context.request_params
 
 
+def test_standard_recreation_forests_uses_type_param_and_models(fake_client_factory):
+    payload = public_payload(
+        {
+            "rcrfrstNm": "가리산자연휴양림",
+            "ctprvnNm": "강원특별자치도",
+            "rcrfrstType": "공립",
+            "rcrfrstFcltyAr": "3050000",
+            "aceptncCo": "1000",
+            "admfee": "1000",
+            "stayngPosblYn": "Y",
+            "mstrFclty": "숲속의집",
+            "rdnmadr": "강원특별자치도 홍천군 두촌면 가리산길 426",
+            "latitude": "37.871",
+            "longitude": "127.956",
+            "phoneNumber": "033-435-6034",
+            "institutionNm": "홍천군",
+            "homepageUrl": "https://example.test",
+            "referenceDate": "2025-01-01",
+            "instt_code": "4250000",
+        },
+        total_count=1,
+    )
+    client, session = fake_client_factory(FakeResponse(payload))
+
+    page = client.travel.standard_recreation_forests(
+        sido_name="강원특별자치도",
+        accommodation_available=True,
+        num_of_rows=1,
+    )
+
+    call = session.calls[0]
+    params = call["params"]
+    assert call["url"] == "https://api.data.go.kr/openapi/tn_pubr_public_rcrfrst_api"
+    assert params["serviceKey"] == "TEST_KEY"
+    assert params["type"] == "json"
+    assert "_type" not in params
+    assert params["ctprvnNm"] == "강원특별자치도"
+    assert params["stayngPosblYn"] == "Y"
+    item = page.items[0]
+    assert item.name == "가리산자연휴양림"
+    assert item.coordinate == PlaceCoordinate(lon=127.956, lat=37.871)
+    assert isinstance(item.address, Address)
+    assert item.raw["instt_code"] == "4250000"
+
+
 def test_wildfire_stats_maps_date_arguments(fake_client_factory):
     client, session = fake_client_factory(FakeResponse(public_payload([])))
 
@@ -77,6 +154,18 @@ def test_wildfire_stats_maps_date_arguments(fake_client_factory):
     params = session.calls[0]["params"]
     assert params["searchStDt"] == "20240101"
     assert params["searchEdDt"] == "20241231"
+
+
+def test_client_catalog_returns_human_readable_entries(fake_client_factory):
+    client, _session = fake_client_factory()
+
+    entries = client.catalog("travel")
+
+    assert any(entry.key == "national_recreation_forest_reservations" for entry in entries)
+    assert any(
+        entry.display_name == "산림청 국립자연휴양림관리소_국립자연휴양림 예약 정보"
+        for entry in entries
+    )
 
 
 def test_mountain_weather_returns_place_coordinate(fake_client_factory):
@@ -267,6 +356,52 @@ def test_file_download_url_from_json_ld(fake_client_factory):
     assert session.calls[0]["url"].endswith("/15112801/fileData.do")
     assert session.calls[1]["url"].endswith("/15112801/fileData.do")
     assert session.calls[2]["url"].endswith("atchFileId=FILE_1&fileDetailSn=1")
+
+
+def test_forest_go_shp_download_submits_personal_purpose(fake_client_factory):
+    client, session = fake_client_factory(
+        FakeResponse(text="<html>popup</html>"),
+        FakeResponse(status_code=302, text="moved"),
+        FakeResponse(content=b"PK\x03\x04zip"),
+    )
+
+    data = client.files.download("PBD0000220")
+
+    popup_call, history_call, download_call = session.calls
+    assert popup_call["url"].endswith("/fileDownloadPopup.do")
+    assert popup_call["params"]["pblicDataId"] == "PBD0000220"
+    assert popup_call["params"]["fileNum"] == "/kidforest/kidforest.zip"
+    assert history_call["method"] == "POST"
+    assert history_call["url"].endswith("/insertDownHistory.do")
+    assert history_call["data"]["dnldPrps"] == "3"
+    assert history_call["data"]["useAgree01"] == "Y"
+    assert download_call["url"].endswith("/fileDown.do?dataType=/kidforest/kidforest.zip")
+    assert data == b"PK\x03\x04zip"
+
+
+def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
+    fake_client_factory,
+    tmp_path,
+):
+    archive = shp_zip(tmp_path)
+    client, _session = fake_client_factory(
+        FakeResponse(text="<html>popup</html>"),
+        FakeResponse(status_code=302, text="moved"),
+        FakeResponse(content=archive),
+    )
+
+    records = client.travel.kid_forest_centers(name="테스트")
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.dataset_id == "PBD0000220"
+    assert record.name == "테스트 유아숲체험원"
+    assert record.operation_status == "운영"
+    assert isinstance(record.address, Address)
+    assert record.address.display_address == "서울특별시 중구 세종대로 110"
+    assert isinstance(record.coordinate, PlaceCoordinate)
+    assert 126.0 < record.coordinate.lon < 128.0
+    assert 37.0 < record.coordinate.lat < 38.0
 
 
 def test_file_download_url_missing_content_url_raises(fake_client_factory):

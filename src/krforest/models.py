@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 RawRecord: TypeAlias = Mapping[str, Any]
 Category: TypeAlias = Literal["travel", "safety"]
 Provider: TypeAlias = Literal["forest.go.kr", "data.go.kr"]
+CatalogKind: TypeAlias = Literal["api", "file_dataset"]
 T = TypeVar("T")
 
 
@@ -75,6 +76,7 @@ class ApiEndpoint(ForestModel):
     notes: str | None = None
     service_key_param: str = "ServiceKey"
     response_format: str | None = None
+    response_type_param: str | None = None
 
 
 class FileDataset(ForestModel):
@@ -88,6 +90,33 @@ class FileDataset(ForestModel):
     description: str
     provider: str = "data.go.kr"
     direct_download: bool = True
+    download_url: str | None = None
+    download_path: str | None = None
+    source_path: str | None = None
+    download_purpose_code: str | None = None
+
+
+class CatalogEntry(ForestModel):
+    """디버그 UI 표시와 선택에 쓰는 human-readable 카탈로그 항목."""
+
+    kind: CatalogKind
+    key: str
+    display_name: str
+    dataset_id: str
+    dataset_name: str
+    categories: tuple[Category, ...]
+    provider: Provider | str
+    description: str
+    detail_url: str
+    service_key_url: str | None = None
+    service_key_account_url: str | None = None
+    service: str | None = None
+    operation: str | None = None
+    url: str | None = None
+    formats: tuple[str, ...] = ()
+    service_key_param: str | None = None
+    response_format: str | None = None
+    response_type_param: str | None = None
 
 
 class MountainWeather(ForestModel):
@@ -112,6 +141,48 @@ class RecreationForestReservation(ForestModel):
     goods_name: str | None = None
     stay_date: str | None = None
     status: str | None = None
+    raw: RawRecord = Field(repr=False)
+
+
+class StandardRecreationForest(ForestModel):
+    """전국휴양림표준데이터의 휴양림 위치·주소·시설 레코드."""
+
+    name: str | None = None
+    sido_name: str | None = None
+    forest_type: str | None = None
+    area: str | None = None
+    capacity: str | None = None
+    entrance_fee: str | None = None
+    accommodation_available: str | None = None
+    main_facilities: str | None = None
+    address: Address | None = None
+    management_agency: str | None = None
+    phone_number: str | None = None
+    homepage_url: str | None = None
+    coordinate: PlaceCoordinate | None = None
+    reference_date: str | None = None
+    institution_code: str | None = None
+    raw: RawRecord = Field(repr=False)
+
+
+class ForestSpatialPoint(ForestModel):
+    """SHP 파일에서 읽은 산림 공간 포인트 레코드."""
+
+    dataset_id: str
+    dataset_name: str
+    name: str | None = None
+    category: str | None = None
+    address: Address | None = None
+    phone_number: str | None = None
+    homepage_url: str | None = None
+    coordinate: PlaceCoordinate | None = None
+    projected_x: float | None = None
+    projected_y: float | None = None
+    year: str | None = None
+    owner_name: str | None = None
+    operation_status: str | None = None
+    region_code: str | None = None
+    region_name: str | None = None
     raw: RawRecord = Field(repr=False)
 
 
