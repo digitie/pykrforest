@@ -3,27 +3,47 @@
 from __future__ import annotations
 
 import io
+import json
+import posixpath
+import xml.etree.ElementTree as ET
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 from kraddr.base import Address, PlaceCoordinate
 
 from ._convert import strip_or_none, to_float_or_none
 from .exceptions import ForestParseError
-from .models import FileDataset, ForestSpatialPoint
+from .models import FileDataset, ForestSpatialFeature, ForestSpatialPoint
 from .parser import first_text
 
-_NAME_KEYS = ("name", "이름", "RCAR_NM", "명칭", "시설명")
-_ADDRESS_KEYS = ("address", "주소", "DTADD", "소재지주소", "소재지도로명주소", "소재지지번주소")
-_CATEGORY_KEYS = ("category", "RCAR_SCTIN", "운영현황", "구분", "종류")
+_NAME_KEYS = ("name", "이름", "FOREST_NM", "RCAR_NM", "명칭", "시설명")
+_ADDRESS_KEYS = (
+    "address",
+    "주소",
+    "POFLC_NM",
+    "DTADD",
+    "소재지주소",
+    "소재지도로명주소",
+    "소재지지번주소",
+)
+_CATEGORY_KEYS = (
+    "category",
+    "FRTP_NM",
+    "MAIN_FORTR",
+    "RCAR_SCTIN",
+    "운영현황",
+    "비고",
+    "구분",
+    "종류",
+)
 _PHONE_KEYS = ("phone_number", "TEL_NO", "telNo", "전화번호", "연락처")
 _HOMEPAGE_KEYS = ("homepage_url", "SITE_URL", "url", "URL", "홈페이지")
 _YEAR_KEYS = ("year", "연도")
-_OWNER_KEYS = ("owner_name", "OWNER_NM", "운영주체")
+_OWNER_KEYS = ("owner_name", "OWNER_NM", "운영주체", "관리주체")
 _STATUS_KEYS = ("operation_status", "운영현황")
-_REGION_CODE_KEYS = ("region_code", "EMNDN_CD", "법정동코드")
-_REGION_NAME_KEYS = ("region_name", "EMNDN_NM", "읍면동명")
+_REGION_CODE_KEYS = ("region_code", "EMD_CD", "EMNDN_CD", "STD_SGGCD", "법정동코드")
+_REGION_NAME_KEYS = ("region_name", "지역", "EMD_NM", "EMNDN_NM", "읍면동명")
 _X_KEYS = ("POINT_X", "x", "X", "longitude", "lon", "경도")
 _Y_KEYS = ("POINT_Y", "y", "Y", "latitude", "lat", "위도")
 
@@ -77,7 +97,135 @@ def forest_spatial_points(
     return tuple(points)
 
 
+def forest_spatial_features(
+    data: bytes,
+    dataset: FileDataset,
+    *,
+    name: str | None = None,
+) -> tuple[ForestSpatialFeature, ...]:
+    """SHP/GeoJSON/GPX ZIP bytes를 지도 앱에서 쓰기 쉬운 피처 tuple로 변환한다."""
+
+    archive = _open_archive(data)
+    name_filter = strip_or_none(name)
+    features: list[ForestSpatialFeature] = []
+
+    for reader, prj_text, source_file, layer_name in _open_readers_from_archive(archive):
+        transformer = _coordinate_transformer(prj_text)
+        for shape_record in reader.iterShapeRecords():
+            raw = _clean_record(shape_record.record.as_dict())
+            feature_name = first_text(raw, *_NAME_KEYS)
+            if name_filter is not None and name_filter not in (feature_name or ""):
+                continue
+
+            geometry = _shape_geometry(shape_record.shape, transformer)
+            features.append(
+                ForestSpatialFeature(
+                    dataset_id=dataset.data_go_id,
+                    dataset_name=dataset.title,
+                    source_file=source_file,
+                    layer_name=layer_name,
+                    name=feature_name,
+                    geometry_type=_geometry_type(geometry),
+                    geometry=geometry,
+                    bbox=_shape_bbox(shape_record.shape, transformer),
+                    coordinate=_shape_centroid(shape_record.shape, transformer),
+                    raw=raw,
+                )
+            )
+
+    for source_file, payload in _geojson_members(archive):
+        for feature in _geojson_features(payload):
+            raw = _clean_record(feature.get("properties", {}))
+            feature_name = first_text(raw, *_NAME_KEYS) or strip_or_none(feature.get("name"))
+            if name_filter is not None and name_filter not in (feature_name or ""):
+                continue
+            geometry = feature.get("geometry")
+            if not isinstance(geometry, Mapping):
+                geometry = None
+            features.append(
+                ForestSpatialFeature(
+                    dataset_id=dataset.data_go_id,
+                    dataset_name=dataset.title,
+                    source_file=source_file,
+                    layer_name=_layer_name(source_file),
+                    name=feature_name,
+                    geometry_type=_geometry_type(geometry),
+                    geometry=dict(geometry) if geometry is not None else None,
+                    bbox=_geometry_bbox(geometry),
+                    coordinate=_geometry_centroid(geometry),
+                    raw=raw,
+                )
+            )
+
+    for source_file, feature in _gpx_features(archive):
+        raw = _clean_record(feature.get("properties", {}))
+        feature_name = first_text(raw, *_NAME_KEYS) or strip_or_none(feature.get("name"))
+        if name_filter is not None and name_filter not in (feature_name or ""):
+            continue
+        geometry = feature.get("geometry")
+        if not isinstance(geometry, Mapping):
+            geometry = None
+        features.append(
+            ForestSpatialFeature(
+                dataset_id=dataset.data_go_id,
+                dataset_name=dataset.title,
+                source_file=source_file,
+                layer_name=_layer_name(source_file),
+                name=feature_name,
+                geometry_type=_geometry_type(geometry),
+                geometry=dict(geometry) if geometry is not None else None,
+                bbox=_geometry_bbox(geometry),
+                coordinate=_geometry_centroid(geometry),
+                raw=raw,
+            )
+        )
+
+    return tuple(features)
+
+
+def archive_files(data: bytes) -> dict[str, bytes]:
+    """ZIP 파일을 사람이 읽을 수 있는 파일명 key의 bytes dict로 푼다."""
+
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        return {"download": data}
+
+    files: dict[str, bytes] = {}
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        files[_zip_member_display_name(info)] = archive.read(info.filename)
+    return files
+
+
 def _open_reader(data: bytes) -> tuple[Any, str | None]:
+    archive = _open_archive(data)
+    readers = _open_readers_from_archive(archive)
+    if not readers:
+        raise ForestParseError(
+            "forest.go.kr SHP archive must include .shp, .shx, and .dbf files",
+            provider="forest.go.kr",
+            failure_kind="parse",
+        )
+    reader, prj_text, _source_file, _layer_name = readers[0]
+    return reader, prj_text
+
+
+def _open_archive(data: bytes) -> zipfile.ZipFile:
+    try:
+        return zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise ForestParseError(
+            "forest.go.kr dataset was not a valid ZIP archive",
+            provider="forest.go.kr",
+            failure_kind="parse",
+        ) from exc
+
+
+def _open_readers_from_archive(
+    archive: zipfile.ZipFile,
+) -> tuple[tuple[Any, str | None, str, str], ...]:
     try:
         import shapefile  # type: ignore[import-untyped]
     except ModuleNotFoundError as exc:  # pragma: no cover
@@ -87,35 +235,33 @@ def _open_reader(data: bytes) -> tuple[Any, str | None]:
             failure_kind="parse",
         ) from exc
 
-    try:
-        archive = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile as exc:
-        raise ForestParseError(
-            "forest.go.kr dataset was not a valid ZIP archive",
-            provider="forest.go.kr",
-            failure_kind="parse",
-        ) from exc
-
     names = archive.namelist()
-    shp_name = _member_by_suffix(names, ".shp")
-    shx_name = _member_by_suffix(names, ".shx")
-    dbf_name = _member_by_suffix(names, ".dbf")
-    prj_name = _member_by_suffix(names, ".prj")
-    if shp_name is None or shx_name is None or dbf_name is None:
-        raise ForestParseError(
-            "forest.go.kr SHP archive must include .shp, .shx, and .dbf files",
-            provider="forest.go.kr",
-            failure_kind="parse",
-        )
+    groups: dict[str, dict[str, str]] = {}
+    for member in names:
+        stem, extension = posixpath.splitext(member)
+        ext = extension.lower()
+        if ext in {".shp", ".shx", ".dbf", ".prj"}:
+            groups.setdefault(stem.lower(), {})[ext] = member
 
-    prj_text = archive.read(prj_name).decode("ascii", errors="ignore") if prj_name else None
-    reader = shapefile.Reader(
-        shp=io.BytesIO(archive.read(shp_name)),
-        shx=io.BytesIO(archive.read(shx_name)),
-        dbf=io.BytesIO(archive.read(dbf_name)),
-        encoding="cp949",
-    )
-    return reader, prj_text
+    readers: list[tuple[Any, str | None, str, str]] = []
+    for members in groups.values():
+        shp_name = members.get(".shp")
+        shx_name = members.get(".shx")
+        dbf_name = members.get(".dbf")
+        if shp_name is None or shx_name is None or dbf_name is None:
+            continue
+        prj_name = members.get(".prj")
+        prj_text = archive.read(prj_name).decode("ascii", errors="ignore") if prj_name else None
+        reader = shapefile.Reader(
+            shp=io.BytesIO(archive.read(shp_name)),
+            shx=io.BytesIO(archive.read(shx_name)),
+            dbf=io.BytesIO(archive.read(dbf_name)),
+            encoding="cp949",
+            encodingErrors="replace",
+        )
+        source_file = _zip_name_from_member(archive, shp_name)
+        readers.append((reader, prj_text, source_file, _layer_name(source_file)))
+    return tuple(readers)
 
 
 def _member_by_suffix(names: list[str], suffix: str) -> str | None:
@@ -179,6 +325,225 @@ def _place_coordinate(
     if x is None or y is None:
         return None
     if -180 <= x <= 180 and -90 <= y <= 90:
-        return PlaceCoordinate(lon=x, lat=y)
+        return PlaceCoordinate(lat=y, lon=x)
     lon, lat = transformer.transform(x, y)
-    return PlaceCoordinate(lon=lon, lat=lat)
+    return PlaceCoordinate(lat=lat, lon=lon)
+
+
+def _shape_geometry(shape: Any, transformer: Any) -> dict[str, Any] | None:
+    geometry = getattr(shape, "__geo_interface__", None)
+    if not isinstance(geometry, Mapping):
+        return None
+    coordinates = geometry.get("coordinates")
+    if coordinates is None:
+        return dict(geometry)
+    return {
+        "type": geometry.get("type"),
+        "coordinates": _transform_coordinates(coordinates, transformer),
+    }
+
+
+def _shape_bbox(shape: Any, transformer: Any) -> tuple[float, float, float, float] | None:
+    bbox = getattr(shape, "bbox", None)
+    if not bbox or len(bbox) < 4:
+        point = _shape_centroid(shape, transformer)
+        if point is None:
+            return None
+        return (point.lon, point.lat, point.lon, point.lat)
+    min_x, min_y, max_x, max_y = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+    min_lon, min_lat = _transform_pair(min_x, min_y, transformer)
+    max_lon, max_lat = _transform_pair(max_x, max_y, transformer)
+    return (
+        min(min_lon, max_lon),
+        min(min_lat, max_lat),
+        max(min_lon, max_lon),
+        max(min_lat, max_lat),
+    )
+
+
+def _shape_centroid(shape: Any, transformer: Any) -> PlaceCoordinate | None:
+    bbox = getattr(shape, "bbox", None)
+    if bbox and len(bbox) >= 4:
+        x = (float(bbox[0]) + float(bbox[2])) / 2
+        y = (float(bbox[1]) + float(bbox[3])) / 2
+        lon, lat = _transform_pair(x, y, transformer)
+        return PlaceCoordinate(lat=lat, lon=lon)
+    points = getattr(shape, "points", None) or []
+    if not points:
+        return None
+    lon, lat = _transform_pair(float(points[0][0]), float(points[0][1]), transformer)
+    return PlaceCoordinate(lat=lat, lon=lon)
+
+
+def _transform_coordinates(value: Any, transformer: Any) -> Any:
+    if _is_coordinate_pair(value):
+        lon, lat = _transform_pair(float(value[0]), float(value[1]), transformer)
+        rest = list(value[2:]) if isinstance(value, (list, tuple)) else []
+        return [lon, lat, *rest]
+    if isinstance(value, (list, tuple)):
+        return [_transform_coordinates(item, transformer) for item in value]
+    return value
+
+
+def _transform_pair(x: float, y: float, transformer: Any) -> tuple[float, float]:
+    if -180 <= x <= 180 and -90 <= y <= 90:
+        return x, y
+    lon, lat = transformer.transform(x, y)
+    return float(lon), float(lat)
+
+
+def _is_coordinate_pair(value: Any) -> bool:
+    if not isinstance(value, (list, tuple)) or len(value) < 2:
+        return False
+    return isinstance(value[0], (int, float)) and isinstance(value[1], (int, float))
+
+
+def _geojson_members(archive: zipfile.ZipFile) -> Iterator[tuple[str, dict[str, Any]]]:
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        name = _zip_member_display_name(info)
+        lower = name.lower()
+        if not (lower.endswith(".geojson") or lower.endswith(".json")):
+            continue
+        text = _decode_text(archive.read(info.filename))
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            continue
+        if isinstance(payload, dict):
+            yield name, payload
+
+
+def _geojson_features(payload: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
+    if payload.get("type") == "FeatureCollection":
+        features = payload.get("features", [])
+        if isinstance(features, list):
+            for feature in features:
+                if isinstance(feature, dict):
+                    yield feature
+    elif payload.get("type") == "Feature":
+        yield dict(payload)
+
+
+def _gpx_features(archive: zipfile.ZipFile) -> Iterator[tuple[str, dict[str, Any]]]:
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        name = _zip_member_display_name(info)
+        if not name.lower().endswith(".gpx"):
+            continue
+        try:
+            root = ET.fromstring(archive.read(info.filename))
+        except ET.ParseError:
+            continue
+        for point in root.findall(".//{*}wpt"):
+            coordinates = _gpx_point(point)
+            if coordinates is None:
+                continue
+            yield name, {
+                "name": _element_text(point, "name"),
+                "properties": _gpx_properties(point),
+                "geometry": {"type": "Point", "coordinates": coordinates},
+            }
+        for tag in ("trk", "rte"):
+            for line in root.findall(f".//{{*}}{tag}"):
+                line_coordinates = [
+                    parsed_point
+                    for child in line.findall(".//{*}trkpt") + line.findall(".//{*}rtept")
+                    if (parsed_point := _gpx_point(child)) is not None
+                ]
+                if line_coordinates:
+                    yield name, {
+                        "name": _element_text(line, "name"),
+                        "properties": _gpx_properties(line),
+                        "geometry": {"type": "LineString", "coordinates": line_coordinates},
+                    }
+
+
+def _gpx_point(element: ET.Element) -> list[float] | None:
+    lat = to_float_or_none(element.attrib.get("lat"))
+    lon = to_float_or_none(element.attrib.get("lon"))
+    if lat is None or lon is None:
+        return None
+    return [lon, lat]
+
+
+def _gpx_properties(element: ET.Element) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for key in ("name", "desc", "type"):
+        value = _element_text(element, key)
+        if value is not None:
+            values[key] = value
+    return values
+
+
+def _element_text(element: ET.Element, tag: str) -> str | None:
+    child = element.find(f"{{*}}{tag}")
+    if child is None:
+        return None
+    return strip_or_none(child.text)
+
+
+def _geometry_type(geometry: Mapping[str, Any] | None) -> str | None:
+    if geometry is None:
+        return None
+    value = geometry.get("type")
+    return str(value) if value is not None else None
+
+
+def _geometry_bbox(geometry: Mapping[str, Any] | None) -> tuple[float, float, float, float] | None:
+    if geometry is None:
+        return None
+    pairs = list(_coordinate_pairs(geometry.get("coordinates")))
+    if not pairs:
+        return None
+    xs = [pair[0] for pair in pairs]
+    ys = [pair[1] for pair in pairs]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _geometry_centroid(geometry: Mapping[str, Any] | None) -> PlaceCoordinate | None:
+    bbox = _geometry_bbox(geometry)
+    if bbox is None:
+        return None
+    return PlaceCoordinate(lat=(bbox[1] + bbox[3]) / 2, lon=(bbox[0] + bbox[2]) / 2)
+
+
+def _coordinate_pairs(value: Any) -> Iterator[tuple[float, float]]:
+    if _is_coordinate_pair(value):
+        yield (float(value[0]), float(value[1]))
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            yield from _coordinate_pairs(child)
+
+
+def _decode_text(data: bytes) -> str:
+    for encoding in ("utf-8-sig", "cp949", "euc-kr"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
+def _layer_name(source_file: str) -> str:
+    name = posixpath.basename(source_file)
+    return posixpath.splitext(name)[0]
+
+
+def _zip_name_from_member(archive: zipfile.ZipFile, member_name: str) -> str:
+    try:
+        info = archive.getinfo(member_name)
+    except KeyError:
+        return member_name
+    return _zip_member_display_name(info)
+
+
+def _zip_member_display_name(info: zipfile.ZipInfo) -> str:
+    if info.flag_bits & 0x800:
+        return info.filename
+    try:
+        return info.filename.encode("cp437").decode("cp949")
+    except UnicodeError:
+        return info.filename

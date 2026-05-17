@@ -224,6 +224,57 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
 
 FILE_DATASETS: tuple[FileDataset, ...] = (
     FileDataset(
+        data_go_id="PBD0000041",
+        title="산림청 등산로정보 ZIP",
+        categories=("travel",),
+        formats=("SHP", "GPX", "GEOJSON", "ZIP"),
+        detail_url=(
+            f"{FOREST_GO_BASE}/kfsweb/kfi/kfs/trail/trailInformation.do"
+            "?pblicDataId=PBD0000041&tabs=3&mn=NKFS_06_08_02"
+            "&subTitle=%eb%93%b1%ec%82%b0%eb%a1%9c%ec%a0%95%eb%b3%b4"
+        ),
+        description="산이름, 위치, 등산로 정보를 담은 산림청 forest.go.kr 다운로드 ZIP.",
+        provider="forest.go.kr",
+        download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=/mount/mountain.zip",
+        download_path="/mount/mountain.zip",
+        source_path="/kfsweb/kfi/kfs/trail/trailInformation.do?mn=NKFS_06_08_02&subTitle=",
+        download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
+    ),
+    FileDataset(
+        data_go_id="PBD0000031",
+        title="산림청 숲길정보 ZIP",
+        categories=("travel",),
+        formats=("SHP", "GPX", "ZIP"),
+        detail_url=(
+            f"{FOREST_GO_BASE}/kfsweb/kfi/kfs/trail/treeRoad.do"
+            "?pblicDataId=PBD0000031&tabs=3&mn=NKFS_06_08_02"
+            "&subTitle=%ec%88%b2%ea%b8%b8%ec%a0%95%eb%b3%b4"
+        ),
+        description="지리산 둘레길 구간명, 코스경로, 거리, 소요시간을 담은 다운로드 ZIP.",
+        provider="forest.go.kr",
+        download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=/trail/dule.zip",
+        download_path="/trail/dule.zip",
+        source_path="/kfsweb/kfi/kfs/trail/treeRoad.do?mn=NKFS_06_08_02",
+        download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
+    ),
+    FileDataset(
+        data_go_id="PBD0000221",
+        title="산림청 산림교육센터 현황 SHP",
+        categories=("travel",),
+        formats=("SHP", "ZIP"),
+        detail_url=(
+            f"{FOREST_GO_BASE}/kfsweb/kfi/kfs/trail/sanrimEdu.do"
+            "?pblicDataId=PBD0000221&tabs=3&mn=NKFS_06_08_02"
+            "&subTitle=%ec%82%b0%eb%a6%bc%ea%b5%90%ec%9c%a1%ec%84%bc%ed%84%b0+%ed%98%84%ed%99%a9"
+        ),
+        description="전국 산림교육센터 위치, 주소, 전화번호, 참여방법 등을 담은 산림청 SHP 파일.",
+        provider="forest.go.kr",
+        download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=/sanrimedu/sanrimedu.zip",
+        download_path="/sanrimedu/sanrimedu.zip",
+        source_path="/kfsweb/kfi/kfs/trail/sanrimEdu.do?mn=NKFS_06_08_02",
+        download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
+    ),
+    FileDataset(
         data_go_id="PBD0000220",
         title="산림청 유아숲체험원 현황 SHP",
         categories=("travel",),
@@ -238,6 +289,26 @@ FILE_DATASETS: tuple[FileDataset, ...] = (
         download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=/kidforest/kidforest.zip",
         download_path="/kidforest/kidforest.zip",
         source_path="/kfsweb/kfi/kfs/trail/kidForest.do?mn=NKFS_06_08_02",
+        download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
+    ),
+    FileDataset(
+        data_go_id="PBD0000077",
+        title="산림청 전통마을숲 위치도 SHP",
+        categories=("travel",),
+        formats=("SHP", "ZIP"),
+        detail_url=(
+            f"{FOREST_GO_BASE}/kfsweb/kfi/kfs/nwopapi/traVllgFrstInfo.do"
+            "?pblicDataId=PBD0000077&tabs=3&mn=NKFS_06_08_02"
+            "&subTitle=%ec%a0%84%ed%86%b5%eb%a7%88%ec%9d%84%ec%88%b2%ec%9c%84%ec%b9%98%eb%8f%84"
+        ),
+        description="전통마을숲의 명칭, 위치, 주요 수종, 면적, 행정구역 정보를 담은 SHP 파일.",
+        provider="forest.go.kr",
+        download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=traVllg_20141202.zip",
+        download_path="traVllg_20141202.zip",
+        source_path=(
+            "/kfsweb/kfi/kfs/nwopapi/traVllgFrstInfo.do"
+            "?pblicDataId=PBD0000077&mn=NKFS_06_08_02&subTitle="
+        ),
         download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
     ),
     FileDataset(
@@ -257,6 +328,23 @@ FILE_DATASETS: tuple[FileDataset, ...] = (
         download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=/huyang/TB_FGDI_FS_HS.zip",
         download_path="/huyang/TB_FGDI_FS_HS.zip",
         source_path="/kfsweb/kfi/kfs/trail/huyang.do?mn=NKFS_06_08_02",
+        download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
+    ),
+    FileDataset(
+        data_go_id="PBD0000210",
+        title="산림청 산사태위험지도 ZIP",
+        categories=("safety",),
+        formats=("TIF", "XML", "PDF", "ZIP"),
+        detail_url=(
+            f"{FOREST_GO_BASE}/kfsweb/kfi/kfs/trail/sanSaTae.do"
+            "?pblicDataId=PBD0000210&tabs=4&mn=NKFS_06_08_02"
+            "&subTitle=%ec%82%b0%ec%82%ac%ed%83%9c%ec%9c%84%ed%97%98%ec%a7%80%eb%8f%84"
+        ),
+        description="산지의 상대적 산사태위험도를 담은 제주 지역 래스터 지도 ZIP.",
+        provider="forest.go.kr",
+        download_url=f"{FOREST_GO_FILE_DOWNLOAD_URL}?dataType=/sansatae/LDM_50110.zip",
+        download_path="/sansatae/LDM_50110.zip",
+        source_path="/kfsweb/kfi/kfs/trail/sanSaTae.do?mn=NKFS_06_08_02&subTitle=",
         download_purpose_code=FOREST_GO_PERSONAL_PURPOSE_CODE,
     ),
     FileDataset(

@@ -71,6 +71,25 @@ def test_live_data_go_safety_endpoint_is_either_authorized_or_clean_auth_error()
         assert page.total_count >= len(page.items)
 
 
+def test_live_mountain_weather_is_either_authorized_or_clean_auth_error():
+    key = _service_key()
+    client = ForestClient(key, timeout=20)
+
+    try:
+        page = client.travel.mountain_weather(num_of_rows=1)
+    except ForestAuthError as exc:
+        assert exc.provider == "data.go.kr"
+        assert exc.failure_kind == "auth"
+        assert key not in str(exc)
+        pytest.xfail("data.go.kr 15084696 mountain weather API is not approved")
+    else:
+        assert page.context.provider == "data.go.kr"
+        assert page.context.endpoint == "mountListSearch"
+        assert "ServiceKey" not in page.context.request_params
+        assert key not in repr(page.context.request_params)
+        assert page.total_count >= len(page.items)
+
+
 def test_live_recreation_forest_reservations_is_either_authorized_or_clean_auth_error():
     key = _service_key()
     client = ForestClient(key, timeout=20)
@@ -88,3 +107,24 @@ def test_live_recreation_forest_reservations_is_either_authorized_or_clean_auth_
         assert "serviceKey" not in page.context.request_params
         assert key not in repr(page.context.request_params)
         assert page.total_count >= len(page.items)
+
+
+def test_live_forest_education_centers_download_and_parse():
+    key = _service_key()
+    client = ForestClient(key, timeout=30)
+
+    records = client.travel.forest_education_centers()
+
+    assert records
+    assert records[0].dataset_id == "PBD0000221"
+    assert records[0].coordinate is not None
+
+
+def test_live_landslide_risk_map_archive_downloads_files():
+    key = _service_key()
+    client = ForestClient(key, timeout=30)
+
+    files = client.safety.landslide_risk_map_files()
+
+    assert any(name.endswith(".tif") for name in files)
+    assert any(name.endswith(".xml") for name in files)

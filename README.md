@@ -10,7 +10,7 @@ and unrelated administrative datasets. It covers:
   mountain weather, recreation forest reservation API, national recreation forest
   standard data, recreation forest details, forest.go.kr SHP spatial datasets
 - safety: wildfire risk/statistics, landslide prediction/history, erosion-control
-  dams, safety file datasets
+  dams, mountain weather, safety file datasets
 
 ## Install
 
@@ -105,8 +105,20 @@ coordinate: PlaceCoordinate | None = forests[0].coordinate
 kid_forests = client.travel.kid_forest_centers()
 print(kid_forests[0].address, kid_forests[0].coordinate)
 
+education_centers = client.travel.forest_education_centers()
+print(education_centers[0].name, education_centers[0].phone_number)
+
+village_forests = client.travel.traditional_village_forests()
+print(village_forests[0].name, village_forests[0].coordinate)
+
 huyang_points = client.travel.recreation_forest_arboretums()
 print(huyang_points[0].name, huyang_points[0].phone_number)
+
+dulle_features = client.travel.dulle_trail_features()
+print(dulle_features[0].geometry_type, dulle_features[0].bbox)
+
+landslide_files = client.safety.landslide_risk_map_files()
+print(landslide_files.keys())
 ```
 
 ## File Datasets
@@ -130,12 +142,13 @@ promotion, facility, reservation policy, and reservation file datasets into
 high-level detail records with `kraddr.base.Address` and
 `kraddr.base.PlaceCoordinate`.
 
-The forest.go.kr SHP entries `PBD0000220` and `PBD0000180` are direct ZIP
+The forest.go.kr entries `PBD0000041`, `PBD0000031`, `PBD0000221`,
+`PBD0000220`, `PBD0000077`, `PBD0000180`, and `PBD0000210` are direct ZIP
 downloads. `client.files.download(...)` opens the download popup flow and submits
-the required purpose as `개인자료용` (`dnldPrps=3`) before fetching the ZIP.
-`client.travel.kid_forest_centers()` and
-`client.travel.recreation_forest_arboretums()` parse those SHP files into
-`ForestSpatialPoint` records with WGS84 `PlaceCoordinate` and `Address` values.
+the required purpose as `개인자료용` (`dnldPrps=3`) before fetching the ZIP. Point
+SHP files are exposed as `ForestSpatialPoint`, vector trail files as
+`ForestSpatialFeature`, and the raster 산사태위험지도 archive as a filename-keyed
+`dict[str, bytes]`.
 
 ## Debug Fixtures
 
@@ -233,5 +246,12 @@ The curated scope was checked against public data.go.kr pages, including:
 - https://www.data.go.kr/data/15074798/openapi.do
 - https://www.data.go.kr/data/15074812/openapi.do
 - https://www.data.go.kr/data/15074803/openapi.do
+- https://www.forest.go.kr/kfsweb/opda/dataMng/selectPblicDataList.do?mn=NKFS_06_08_02&tabs=3
+- https://www.forest.go.kr/kfsweb/opda/dataMng/selectPblicDataList.do?mn=NKFS_06_08_02&tabs=4
+- https://www.forest.go.kr/kfsweb/kfi/kfs/trail/trailInformation.do?pblicDataId=PBD0000041&tabs=3&mn=NKFS_06_08_02
+- https://www.forest.go.kr/kfsweb/kfi/kfs/trail/treeRoad.do?pblicDataId=PBD0000031&tabs=3&mn=NKFS_06_08_02
+- https://www.forest.go.kr/kfsweb/kfi/kfs/trail/sanrimEdu.do?pblicDataId=PBD0000221&tabs=3&mn=NKFS_06_08_02
 - https://www.forest.go.kr/kfsweb/kfi/kfs/trail/kidForest.do?mn=NKFS_06_08_02
+- https://www.forest.go.kr/kfsweb/kfi/kfs/nwopapi/traVllgFrstInfo.do?pblicDataId=PBD0000077&tabs=3&mn=NKFS_06_08_02
 - https://www.forest.go.kr/kfsweb/kfi/kfs/trail/huyang.do?pblicDataId=PBD0000180&tabs=3&mn=NKFS_06_08_02
+- https://www.forest.go.kr/kfsweb/kfi/kfs/trail/sanSaTae.do?pblicDataId=PBD0000210&tabs=4&mn=NKFS_06_08_02

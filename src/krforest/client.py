@@ -34,6 +34,7 @@ from .models import (
     CatalogEntry,
     ErosionControlDam,
     FileDataset,
+    ForestSpatialFeature,
     ForestSpatialPoint,
     MountainWeather,
     Page,
@@ -56,7 +57,13 @@ from .processor import (
     build_recreation_forests,
     csv_records,
 )
-from .spatial import forest_spatial_points
+from .spatial import (
+    archive_files as parse_archive_files,
+)
+from .spatial import (
+    forest_spatial_features,
+    forest_spatial_points,
+)
 
 DEFAULT_ENV_NAMES = (
     "KRFOREST_SERVICE_KEY",
@@ -499,6 +506,35 @@ class TravelNamespace:
             parse_standard_recreation_forest,
         )
 
+    def forest_trail_file_features(
+        self,
+        *,
+        name: str | None = None,
+    ) -> tuple[ForestSpatialFeature, ...]:
+        """산림청 등산로정보 다운로드 ZIP을 공간 피처 레코드로 반환한다."""
+
+        return self._client.files.spatial_features("PBD0000041", name=name)
+
+    def dulle_trail_features(
+        self,
+        *,
+        name: str | None = None,
+    ) -> tuple[ForestSpatialFeature, ...]:
+        """산림청 숲길정보 다운로드 ZIP을 공간 피처 레코드로 반환한다."""
+
+        return self._client.files.spatial_features("PBD0000031", name=name)
+
+    def forest_education_centers(
+        self,
+        *,
+        name: str | None = None,
+    ) -> tuple[ForestSpatialPoint, ...]:
+        """산림청 산림교육센터 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
+
+        dataset = file_dataset("PBD0000221")
+        data = self._client.files.download(dataset.data_go_id)
+        return forest_spatial_points(data, dataset, name=name)
+
     def kid_forest_centers(
         self,
         *,
@@ -507,6 +543,17 @@ class TravelNamespace:
         """산림청 유아숲체험원 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
 
         dataset = file_dataset("PBD0000220")
+        data = self._client.files.download(dataset.data_go_id)
+        return forest_spatial_points(data, dataset, name=name)
+
+    def traditional_village_forests(
+        self,
+        *,
+        name: str | None = None,
+    ) -> tuple[ForestSpatialPoint, ...]:
+        """산림청 전통마을숲 위치도 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
+
+        dataset = file_dataset("PBD0000077")
         data = self._client.files.download(dataset.data_go_id)
         return forest_spatial_points(data, dataset, name=name)
 
@@ -671,6 +718,11 @@ class SafetyNamespace:
             parse_erosion_control_dam,
         )
 
+    def landslide_risk_map_files(self) -> dict[str, bytes]:
+        """산림청 산사태위험지도 ZIP을 파일명 기준 bytes dict로 반환한다."""
+
+        return self._client.files.archive_files("PBD0000210")
+
 
 @dataclass(frozen=True, slots=True)
 class FileDataNamespace:
@@ -740,6 +792,22 @@ class FileDataNamespace:
             endpoint=dataset.data_go_id,
         )
 
+    def archive_files(self, data_go_id: str) -> dict[str, bytes]:
+        """ZIP 파일데이터를 다운로드한 뒤 파일명 key의 bytes dict로 반환한다."""
+
+        return parse_archive_files(self.download(data_go_id))
+
+    def spatial_features(
+        self,
+        data_go_id: str,
+        *,
+        name: str | None = None,
+    ) -> tuple[ForestSpatialFeature, ...]:
+        """SHP/GeoJSON/GPX 파일데이터를 다운로드한 뒤 공간 피처 DTO로 반환한다."""
+
+        dataset = file_dataset(data_go_id)
+        return forest_spatial_features(self.download(data_go_id), dataset, name=name)
+
 
 KrForestClient = ForestClient
 PyKrForestClient = ForestClient
@@ -793,9 +861,10 @@ def _submit_forest_go_download_history(
     if dataset.download_path is None or dataset.source_path is None:
         return
 
+    tabs = _forest_go_tabs(dataset)
     popup_params = {
         "pblicDataId": dataset.data_go_id,
-        "tabs": "3",
+        "tabs": tabs,
         "searchSrvc": "",
         "subTitle": "",
         "fileNum": dataset.download_path,
@@ -823,16 +892,16 @@ def _submit_forest_go_download_history(
         )
 
     history_data = {
-            "dataType": dataset.download_path,
-            "url": dataset.source_path,
-            "pblicDataId": dataset.data_go_id,
-            "tabs": "3",
-            "searchSrvc": "",
-            "searchWrd": "",
-            "searchCnd": "",
-            "dnldPrps": dataset.download_purpose_code or "3",
-            "dnldDetlPrps": "",
-            "useAgree01": "Y",
+        "dataType": dataset.download_path,
+        "url": dataset.source_path,
+        "pblicDataId": dataset.data_go_id,
+        "tabs": tabs,
+        "searchSrvc": "",
+        "searchWrd": "",
+        "searchCnd": "",
+        "dnldPrps": dataset.download_purpose_code or "3",
+        "dnldDetlPrps": "",
+        "useAgree01": "Y",
     }
     response = _forest_go_request_with_retry(
         lambda: session.post(
@@ -852,6 +921,10 @@ def _submit_forest_go_download_history(
             status_code=int(response.status_code),
             failure_kind="request",
         )
+
+
+def _forest_go_tabs(dataset: FileDataset) -> str:
+    return "4" if "safety" in dataset.categories else "3"
 
 
 def _forest_go_request_with_retry(

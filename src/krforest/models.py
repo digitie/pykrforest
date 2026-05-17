@@ -186,6 +186,21 @@ class ForestSpatialPoint(ForestModel):
     raw: RawRecord = Field(repr=False)
 
 
+class ForestSpatialFeature(ForestModel):
+    """SHP/GeoJSON/GPX 파일에서 읽은 산림 공간 피처 레코드."""
+
+    dataset_id: str
+    dataset_name: str
+    source_file: str | None = None
+    layer_name: str | None = None
+    name: str | None = None
+    geometry_type: str | None = None
+    geometry: RawRecord | None = Field(default=None, repr=False)
+    bbox: tuple[float, float, float, float] | None = None
+    coordinate: PlaceCoordinate | None = None
+    raw: RawRecord = Field(repr=False)
+
+
 class RecreationForest(ForestModel):
     """국립자연휴양림 파일데이터를 조합한 위치·주소·상세 정보."""
 

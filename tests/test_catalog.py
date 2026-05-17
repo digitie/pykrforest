@@ -45,8 +45,13 @@ def test_catalog_lookup_and_invalid_category():
     assert standard.service_key_param == "serviceKey"
     assert standard.response_type_param == "type"
     assert file_dataset("15112801").formats == ("CSV",)
+    assert file_dataset("PBD0000041").provider == "forest.go.kr"
+    assert file_dataset("PBD0000031").download_path == "/trail/dule.zip"
+    assert file_dataset("PBD0000221").download_path == "/sanrimedu/sanrimedu.zip"
     assert file_dataset("PBD0000220").provider == "forest.go.kr"
+    assert file_dataset("PBD0000077").download_path == "traVllg_20141202.zip"
     assert file_dataset("PBD0000180").download_purpose_code == "3"
+    assert file_dataset("PBD0000210").categories == ("safety",)
 
     with pytest.raises(ValueError, match="category"):
         api_endpoints("biology")
@@ -84,4 +89,6 @@ def test_file_catalog_keeps_to_travel_and_safety_scope():
 
     assert "산사태" in titles
     assert "숲길" in titles
+    assert "산림교육센터" in titles
+    assert "전통마을숲" in titles
     assert "국가표준곤충목록" not in titles

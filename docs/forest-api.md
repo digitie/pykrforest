@@ -48,13 +48,27 @@ Notes:
   files, submit the popup purpose as `개인자료용` (`dnldPrps=3`), and return
   `ForestSpatialPoint` records with `kraddr.base.Address` and transformed WGS84
   `kraddr.base.PlaceCoordinate`.
+- `client.travel.forest_education_centers()` and
+  `client.travel.traditional_village_forests()` apply the same forest.go.kr
+  download flow and return `ForestSpatialPoint` records.
+- `client.travel.forest_trail_file_features()` and
+  `client.travel.dulle_trail_features()` download the forest.go.kr aggregate ZIP
+  files and return `ForestSpatialFeature` records with WGS84 geometry metadata.
+- `client.safety.landslide_risk_map_files()` downloads the forest.go.kr
+  산사태위험지도 ZIP and returns a filename-keyed `dict[str, bytes]` because the
+  dataset is raster TIF/XML/PDF rather than record-shaped vector data.
 
 ## Implemented File Datasets
 
 | data.go.kr | Category | Format | Dataset |
 | --- | --- | --- | --- |
+| PBD0000041 | travel | SHP, GPX, GEOJSON, ZIP | 산림청 등산로정보 ZIP |
+| PBD0000031 | travel | SHP, GPX, ZIP | 산림청 숲길정보 ZIP |
+| PBD0000221 | travel | SHP, ZIP | 산림청 산림교육센터 현황 SHP |
 | PBD0000220 | travel | SHP, ZIP | 산림청 유아숲체험원 현황 SHP |
+| PBD0000077 | travel | SHP, ZIP | 산림청 전통마을숲 위치도 SHP |
 | PBD0000180 | travel | SHP, ZIP | 산림청 휴양림수목원 위치도 SHP |
+| PBD0000210 | safety | TIF, XML, PDF, ZIP | 산림청 산사태위험지도 ZIP |
 | 15112801 | travel | CSV | 산림청 국립자연휴양림관리소_숲나들e 숲길 100대명산 정보 |
 | 3034022 | travel | SHP | 산림청_등산로(산림문화·휴양정보) |
 | 3034163 | travel | SHP | 산림청_숲길(산림문화·휴양정보) |

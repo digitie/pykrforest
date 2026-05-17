@@ -52,6 +52,37 @@ def shp_zip(tmp_path) -> bytes:
     return archive_path.read_bytes()
 
 
+def line_shp_zip(tmp_path) -> bytes:
+    import zipfile
+
+    import shapefile
+
+    base = tmp_path / "dule"
+    writer = shapefile.Writer(str(base), shapeType=shapefile.POLYLINE, encoding="cp949")
+    writer.field("Name", "C", size=80)
+    writer.field("ID", "C", size=20)
+    writer.line([[(953901.165, 1952032.08), (954901.165, 1953032.08)]])
+    writer.record("지리산둘레길 테스트", "DULE-1")
+    writer.close()
+    base.with_suffix(".prj").write_text(KOREA_2000_UNIFIED_WKT, encoding="ascii")
+
+    archive_path = tmp_path / "dule.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for suffix in (".shp", ".shx", ".dbf", ".prj"):
+            archive.write(base.with_suffix(suffix), arcname=f"dule{suffix}")
+    return archive_path.read_bytes()
+
+
+def binary_zip(tmp_path) -> bytes:
+    import zipfile
+
+    archive_path = tmp_path / "risk.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("risk.tif", b"TIFF")
+        archive.writestr("risk.tif.xml", b"<metadata />")
+    return archive_path.read_bytes()
+
+
 def test_legacy_xml_endpoint_sends_service_key_and_parses_page(fake_client_factory):
     xml = xml_payload(
         """
@@ -137,7 +168,7 @@ def test_standard_recreation_forests_uses_type_param_and_models(fake_client_fact
     assert params["stayngPosblYn"] == "Y"
     item = page.items[0]
     assert item.name == "가리산자연휴양림"
-    assert item.coordinate == PlaceCoordinate(lon=127.956, lat=37.871)
+    assert item.coordinate == PlaceCoordinate(lat=37.871, lon=127.956)
     assert isinstance(item.address, Address)
     assert item.raw["instt_code"] == "4250000"
 
@@ -178,7 +209,7 @@ def test_mountain_weather_returns_place_coordinate(fake_client_factory):
     page = client.travel.mountain_weather(num_of_rows=1)
 
     assert isinstance(page.items[0].coordinate, PlaceCoordinate)
-    assert page.items[0].coordinate == PlaceCoordinate(lon=126.9636, lat=37.445)
+    assert page.items[0].coordinate == PlaceCoordinate(lat=37.445, lon=126.9636)
     assert page.items[0].raw["stationName"] == "관악산"
 
 
@@ -204,7 +235,7 @@ def test_erosion_control_dams_returns_place_coordinate(fake_client_factory):
 
     page = client.safety.erosion_control_dams(num_of_rows=1)
 
-    assert page.items[0].coordinate == PlaceCoordinate(lon=127.1, lat=37.2)
+    assert page.items[0].coordinate == PlaceCoordinate(lat=37.2, lon=127.1)
     assert page.items[0].raw["name"] == "테스트사방댐"
 
 
@@ -287,7 +318,7 @@ def test_recreation_forests_combines_files_with_address_and_coordinate(fake_clie
     forest = forests[0]
     assert forest.institution_id == "FR001"
     assert forest.name == "덕유산자연휴양림"
-    assert forest.coordinate == PlaceCoordinate(lon=127.8, lat=35.9)
+    assert forest.coordinate == PlaceCoordinate(lat=35.9, lon=127.8)
     assert isinstance(forest.address, Address)
     assert forest.address.display_address == "전북 무주군 무풍면 구천동로 530-62"
     assert forest.phone_number == "063-322-1097"
@@ -379,6 +410,46 @@ def test_forest_go_shp_download_submits_personal_purpose(fake_client_factory):
     assert data == b"PK\x03\x04zip"
 
 
+def test_safety_forest_go_download_uses_safety_tab_and_returns_archive_files(
+    fake_client_factory,
+    tmp_path,
+):
+    archive = binary_zip(tmp_path)
+    client, session = fake_client_factory(
+        FakeResponse(text="<html>popup</html>"),
+        FakeResponse(status_code=302, text="moved"),
+        FakeResponse(content=archive),
+    )
+
+    files = client.safety.landslide_risk_map_files()
+
+    popup_call, history_call, download_call = session.calls
+    assert popup_call["params"]["pblicDataId"] == "PBD0000210"
+    assert popup_call["params"]["tabs"] == "4"
+    assert history_call["data"]["tabs"] == "4"
+    assert history_call["data"]["dnldPrps"] == "3"
+    assert download_call["url"].endswith("/fileDown.do?dataType=/sansatae/LDM_50110.zip")
+    assert files["risk.tif"] == b"TIFF"
+    assert files["risk.tif.xml"] == b"<metadata />"
+
+
+def test_forest_education_centers_parse_shp(fake_client_factory, tmp_path):
+    archive = shp_zip(tmp_path)
+    client, _session = fake_client_factory(
+        FakeResponse(text="<html>popup</html>"),
+        FakeResponse(status_code=302, text="moved"),
+        FakeResponse(content=archive),
+    )
+
+    records = client.travel.forest_education_centers(name="테스트")
+
+    assert len(records) == 1
+    assert records[0].dataset_id == "PBD0000221"
+    assert records[0].name == "테스트 유아숲체험원"
+    assert records[0].operation_status == "운영"
+    assert isinstance(records[0].coordinate, PlaceCoordinate)
+
+
 def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
     fake_client_factory,
     tmp_path,
@@ -402,6 +473,28 @@ def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
     assert isinstance(record.coordinate, PlaceCoordinate)
     assert 126.0 < record.coordinate.lon < 128.0
     assert 37.0 < record.coordinate.lat < 38.0
+
+
+def test_dulle_trail_features_parse_line_shp(fake_client_factory, tmp_path):
+    archive = line_shp_zip(tmp_path)
+    client, _session = fake_client_factory(
+        FakeResponse(text="<html>popup</html>"),
+        FakeResponse(status_code=302, text="moved"),
+        FakeResponse(content=archive),
+    )
+
+    features = client.travel.dulle_trail_features(name="지리산")
+
+    assert len(features) == 1
+    feature = features[0]
+    assert feature.dataset_id == "PBD0000031"
+    assert feature.name == "지리산둘레길 테스트"
+    assert feature.geometry_type == "LineString"
+    assert feature.geometry is not None
+    assert feature.bbox is not None
+    assert isinstance(feature.coordinate, PlaceCoordinate)
+    assert 126.0 < feature.coordinate.lon < 128.0
+    assert 37.0 < feature.coordinate.lat < 38.0
 
 
 def test_file_download_url_missing_content_url_raises(fake_client_factory):

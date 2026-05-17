@@ -28,6 +28,11 @@
 
 ## 절대 규칙
 
+- 외부 API 관련 작업은 다른 구현보다 먼저 wrapper/adapter/gateway 지양 원칙을 확인하고 문서/코드에 반영한 뒤 진행한다.
+- downstream이 직접 사용할 안정된 public client, typed model, enum, helper를 제공한다.
+- 단순 전달용 wrapper, 장기 호환 alias, 임시 facade를 만들지 않는다.
+- TripMate나 `python-krtour-map`에서 필요한 endpoint, pagination, cursor, exception, raw payload 계약이 부족하면 이 저장소의 public API를 먼저 안정화한다.
+- 다른 라이브러리에 검증된 구현이 있으면 wrapper로 감싸지 말고 라이선스와 출처를 확인한 뒤 현재 구조에 직접 반영한다.
 - API 키를 커밋하지 않는다. `TRIPMATE_DATA_GO_SERVICE_KEY`,
   `KRFOREST_SERVICE_KEY`, `PYKRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`,
   `DATA_GO_SERVICE_KEY`는 로컬 환경변수로만 사용한다.
