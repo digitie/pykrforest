@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -28,7 +29,6 @@ from krforest.exceptions import ForestApiError  # noqa: E402
 
 DEFAULT_ENV_NAMES = (
     "KRFOREST_SERVICE_KEY",
-    "PYKRFOREST_SERVICE_KEY",
     "KFS_SERVICE_KEY",
     "FOREST_SERVICE_KEY",
     "DATA_GO_SERVICE_KEY",
@@ -126,16 +126,16 @@ if "debug_run" not in st.session_state:
 if run_button:
     try:
         params = parse_params(params_raw)
-        client = ForestClient(
-            service_key or None,
-            timeout=float(timeout),
-        )
-        st.session_state.debug_run = client.debug_endpoint(
-            selected_entry.key,
-            params,
-            page_no=int(page_no),
-            num_of_rows=int(num_of_rows),
-        )
+        async def run_debug() -> DebugRun:
+            async with ForestClient(api_key=service_key or None, timeout=float(timeout)) as client:
+                return await client.debug_endpoint(
+                    selected_entry.key,
+                    params,
+                    page_no=int(page_no),
+                    num_of_rows=int(num_of_rows),
+                )
+
+        st.session_state.debug_run = asyncio.run(run_debug())
     except (ForestApiError, ValueError, json.JSONDecodeError) as exc:
         st.session_state.debug_run = DebugRun(
             function=selected_entry.key,

@@ -1,16 +1,16 @@
-"""사용자용 산림청 공공데이터 클라이언트."""
+"""사용자용 산림청 공공데이터 비동기 클라이언트."""
 
 from __future__ import annotations
 
 import json
-import os
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass
+from types import TracebackType
 from typing import Any, TypeVar
 from urllib.parse import urljoin
 
-from ._http import ForestHttp, SessionLike
+from ._http import AsyncSessionLike, ForestHttp, ResponseLike
 from .catalog import (
     FOREST_GO_FILE_DOWNLOAD_HISTORY_URL,
     FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
@@ -21,6 +21,7 @@ from .catalog import (
     file_dataset,
     file_datasets,
 )
+from .config import ForestConfig
 from .debug import DebugRun, jsonable, redact_sensitive
 from .exceptions import (
     ForestApiError,
@@ -65,75 +66,66 @@ from .spatial import (
     forest_spatial_points,
 )
 
-DEFAULT_ENV_NAMES = (
-    "KRFOREST_SERVICE_KEY",
-    "PYKRFOREST_SERVICE_KEY",
-    "KFS_SERVICE_KEY",
-    "FOREST_SERVICE_KEY",
-    "DATA_GO_SERVICE_KEY",
-    "TRIPMATE_DATA_GO_SERVICE_KEY",
-)
 T = TypeVar("T")
 
 
 class ForestClient:
-    """정리된 산림청 여행·안전 공공데이터 클라이언트.
-
-    이 클라이언트는 두 계열의 공공데이터를 다룬다.
-
-    * legacy ``api.forest.go.kr`` 숲길·산림문화 endpoint
-    * ``apis.data.go.kr`` 산불, 산사태, 산악기상 endpoint
-
-    파일데이터는 ``client.files``에서 정리된 카탈로그와 data.go.kr 상세 페이지의
-    다운로드 URL 탐색 기능으로 제공한다.
-    """
+    """산림청 여행·안전 공공데이터 비동기 facade."""
 
     def __init__(
         self,
-        service_key: str | None = None,
         *,
-        timeout: float = 10.0,
-        session: SessionLike | None = None,
+        api_key: str | None = None,
+        timeout: float | str | None = None,
+        max_rps: float | str | None = None,
+        session: AsyncSessionLike | None = None,
         service_key_param: str = "ServiceKey",
     ) -> None:
-        key = _normalize_service_key(service_key) or _first_env(DEFAULT_ENV_NAMES)
-        if not key:
-            names = ", ".join(DEFAULT_ENV_NAMES)
-            raise ForestAuthError(
-                f"service_key is required. Pass service_key=... or set one of: {names}",
-                failure_kind="auth",
-            )
-        self.service_key = key
-        self.timeout = timeout
-        self._http = ForestHttp(
-            key,
+        self.config = ForestConfig.from_env(
+            api_key=api_key,
             timeout=timeout,
+            max_rps=max_rps,
+        )
+        self.api_key = self.config.api_key
+        self.timeout = self.config.timeout
+        self._http = ForestHttp(
+            self.api_key,
+            timeout=self.timeout,
             session=session,
             service_key_param=service_key_param,
+            max_rps=self.config.max_rps,
         )
         self.travel = TravelNamespace(self)
         self.safety = SafetyNamespace(self)
         self.files = FileDataNamespace(self)
+        self.closed = False
 
     @classmethod
-    def from_env(
-        cls,
-        name: str = "KRFOREST_SERVICE_KEY",
-        *,
-        fallback_names: tuple[str, ...] = (
-            "PYKRFOREST_SERVICE_KEY",
-            "KFS_SERVICE_KEY",
-            "FOREST_SERVICE_KEY",
-            "DATA_GO_SERVICE_KEY",
-            "TRIPMATE_DATA_GO_SERVICE_KEY",
-        ),
-        **kwargs: Any,
-    ) -> ForestClient:
-        service_key = os.getenv(name) or _first_env(fallback_names)
-        if not service_key:
-            names = ", ".join((name, *fallback_names))
-            raise ForestAuthError(f"none of these environment variables are set: {names}")
-        return cls(service_key=service_key, **kwargs)
+    def from_env(cls, **kwargs: Any) -> ForestClient:
+        """환경 변수 기반 설정으로 클라이언트를 만든다."""
+
+        return cls(**kwargs)
+
+    @classmethod
+    def aio(cls, **kwargs: Any) -> ForestClient:
+        """krheritage와 같은 생성 패턴을 위한 비동기 클라이언트 생성자."""
+
+        return cls(**kwargs)
+
+    async def __aenter__(self) -> ForestClient:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+        self.closed = True
 
     def endpoints(self, category: str | None = None) -> tuple[ApiEndpoint, ...]:
         """정리된 API endpoint 메타데이터를 반환한다."""
@@ -146,11 +138,11 @@ class ForestClient:
         return file_datasets(category)
 
     def catalog(self, category: str | None = None) -> tuple[CatalogEntry, ...]:
-        """디버그 UI와 선택 목록에 쓸 human-readable 카탈로그를 반환한다."""
+        """디버그 UI와 선택 목록에서 쓰는 human-readable 카탈로그를 반환한다."""
 
         return catalog_entries(category)
 
-    def raw_endpoint(
+    async def raw_endpoint(
         self,
         endpoint_key: str,
         params: Mapping[str, Any] | None = None,
@@ -162,14 +154,14 @@ class ForestClient:
         """정리된 endpoint key로 호출하고 raw item mapping을 반환한다."""
 
         endpoint = api_endpoint(endpoint_key)
-        return self._page(
+        return await self._page(
             endpoint,
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
             lambda row: row,
             response_format=response_format,
         )
 
-    def debug_endpoint(
+    async def debug_endpoint(
         self,
         endpoint_key: str,
         params: Mapping[str, Any] | None = None,
@@ -178,7 +170,7 @@ class ForestClient:
         num_of_rows: int = 10,
         response_format: str | None = None,
     ) -> DebugRun:
-        """디버그 UI가 사용할 수 있는 endpoint replay용 실행 결과를 반환한다."""
+        """디버그 UI가 저장 가능한 endpoint replay 결과를 반환한다."""
 
         endpoint = api_endpoint(endpoint_key)
         fmt = response_format or endpoint.response_format or (
@@ -206,7 +198,7 @@ class ForestClient:
                 "query": {key: value for key, value in query.items() if value is not None},
                 "headers": {"Accept": "application/json" if fmt == "json" else "application/xml"},
             }
-            page = self.raw_endpoint(
+            page = await self.raw_endpoint(
                 endpoint_key,
                 params,
                 page_no=page_no,
@@ -267,42 +259,23 @@ class ForestClient:
             catalog=jsonable(entry),
         )
 
-    def debug_raw_endpoint(
+    async def iter_pages(
         self,
-        endpoint_key: str,
-        params: Mapping[str, Any] | None = None,
-        *,
-        page_no: int = 1,
-        num_of_rows: int = 10,
-        response_format: str | None = None,
-    ) -> DebugRun:
-        """기존 명칭과 명확성을 위한 raw endpoint 디버그 alias."""
-
-        return self.debug_endpoint(
-            endpoint_key,
-            params,
-            page_no=page_no,
-            num_of_rows=num_of_rows,
-            response_format=response_format,
-        )
-
-    def iter_pages(
-        self,
-        fetch_page: Callable[..., Page[T]],
+        fetch_page: Callable[..., Awaitable[Page[T]]],
         *args: Any,
         page_no: int = 1,
         num_of_rows: int = 10,
         max_pages: int | None = None,
         max_items: int | None = None,
         **kwargs: Any,
-    ) -> Iterator[Page[T]]:
-        """Page를 반환하는 클라이언트 메서드를 페이지 단위로 순회한다."""
+    ) -> AsyncIterator[Page[T]]:
+        """Page 반환 메서드를 비동기 페이지 단위로 순회한다."""
 
         fetched = 0
         current = page_no
         pages = 0
         while True:
-            page = fetch_page(*args, page_no=current, num_of_rows=num_of_rows, **kwargs)
+            page = await fetch_page(*args, page_no=current, num_of_rows=num_of_rows, **kwargs)
             if page.is_empty:
                 return
             yield page
@@ -316,7 +289,7 @@ class ForestClient:
                 return
             current = page.next_page_no
 
-    def _page(
+    async def _page(
         self,
         endpoint: ApiEndpoint,
         params: Mapping[str, Any] | None,
@@ -327,7 +300,7 @@ class ForestClient:
         fmt = response_format or endpoint.response_format or (
             "json" if endpoint.provider == "data.go.kr" else "xml"
         )
-        payload = self._http.get(
+        payload = await self._http.get(
             endpoint.url,
             dict(params or {}),
             provider=endpoint.provider,
@@ -364,23 +337,23 @@ class ForestClient:
 class TravelNamespace:
     _client: ForestClient
 
-    def forest_services(
+    async def forest_services(
         self,
         *,
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
     ) -> Page[RawRecord]:
-        """숲서비스와 둘레길 레코드를 조회한다."""
+        """숲길 서비스와 둘레길 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "forest_trail_services",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def mountain_stories(
+    async def mountain_stories(
         self,
         *,
         page_no: int = 1,
@@ -389,14 +362,14 @@ class TravelNamespace:
     ) -> Page[RawRecord]:
         """산 정보 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "mountain_stories",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def forest_spatial_trails(
+    async def forest_spatial_trails(
         self,
         *,
         page_no: int = 1,
@@ -405,14 +378,14 @@ class TravelNamespace:
     ) -> Page[RawRecord]:
         """등산로 산림공간정보 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "forest_spatial_trails",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def baekdu_trails(
+    async def baekdu_trails(
         self,
         *,
         page_no: int = 1,
@@ -421,30 +394,30 @@ class TravelNamespace:
     ) -> Page[RawRecord]:
         """백두대간 등산로 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "baekdu_trails",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def famous_mountain_trails(
+    async def famous_mountain_trails(
         self,
         *,
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
     ) -> Page[RawRecord]:
-        """명산등산로 레코드를 조회한다."""
+        """명산 등산로 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "famous_mountain_trails",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def mountain_weather(
+    async def mountain_weather(
         self,
         *,
         page_no: int = 1,
@@ -453,13 +426,13 @@ class TravelNamespace:
     ) -> Page[MountainWeather]:
         """국립산림과학원 산악기상 레코드를 조회한다."""
 
-        return self._client._page(
+        return await self._client._page(
             api_endpoint("mountain_weather"),
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
             parse_mountain_weather,
         )
 
-    def recreation_forest_reservations(
+    async def recreation_forest_reservations(
         self,
         *,
         goods_name: str | None = None,
@@ -469,20 +442,20 @@ class TravelNamespace:
         num_of_rows: int = 10,
         **params: Any,
     ) -> Page[RecreationForestReservation]:
-        """국립자연휴양림 예약정보 OpenAPI 레코드를 조회한다."""
+        """국립자연휴양림 예약 정보 OpenAPI 레코드를 조회한다."""
 
         query = dict(params)
         query["goodsNm"] = goods_name
         query["startStngDt"] = start_stay_date
         query["endStngDt"] = end_stay_date
-        return self._client._page(
+        return await self._client._page(
             api_endpoint("national_recreation_forest_reservations"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
             parse_recreation_forest_reservation,
             response_format="xml",
         )
 
-    def standard_recreation_forests(
+    async def standard_recreation_forests(
         self,
         *,
         name: str | None = None,
@@ -493,102 +466,98 @@ class TravelNamespace:
         num_of_rows: int = 10,
         **params: Any,
     ) -> Page[StandardRecreationForest]:
-        """전국휴양림표준데이터 OpenAPI 레코드를 주소와 좌표 포함 모델로 조회한다."""
+        """전국 휴양림 표준데이터를 주소와 좌표 포함 모델로 조회한다."""
 
         query = dict(params)
         query["rcrfrstNm"] = name
         query["ctprvnNm"] = sido_name
         query["rcrfrstType"] = forest_type
         query["stayngPosblYn"] = _yn_value(accommodation_available)
-        return self._client._page(
+        return await self._client._page(
             api_endpoint("standard_recreation_forests"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
             parse_standard_recreation_forest,
         )
 
-    def forest_trail_file_features(
+    async def forest_trail_file_features(
         self,
         *,
         name: str | None = None,
     ) -> tuple[ForestSpatialFeature, ...]:
-        """산림청 등산로정보 다운로드 ZIP을 공간 피처 레코드로 반환한다."""
+        """산림청 등산로정보 ZIP을 공간 feature DTO로 반환한다."""
 
-        return self._client.files.spatial_features("PBD0000041", name=name)
+        return await self._client.files.spatial_features("PBD0000041", name=name)
 
-    def dulle_trail_features(
+    async def dulle_trail_features(
         self,
         *,
         name: str | None = None,
     ) -> tuple[ForestSpatialFeature, ...]:
-        """산림청 숲길정보 다운로드 ZIP을 공간 피처 레코드로 반환한다."""
+        """산림청 둘레길정보 ZIP을 공간 feature DTO로 반환한다."""
 
-        return self._client.files.spatial_features("PBD0000031", name=name)
+        return await self._client.files.spatial_features("PBD0000031", name=name)
 
-    def forest_education_centers(
+    async def forest_education_centers(
         self,
         *,
         name: str | None = None,
     ) -> tuple[ForestSpatialPoint, ...]:
-        """산림청 산림교육센터 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
+        """산림교육센터 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
 
         dataset = file_dataset("PBD0000221")
-        data = self._client.files.download(dataset.data_go_id)
+        data = await self._client.files.download(dataset.data_go_id)
         return forest_spatial_points(data, dataset, name=name)
 
-    def kid_forest_centers(
+    async def kid_forest_centers(
         self,
         *,
         name: str | None = None,
     ) -> tuple[ForestSpatialPoint, ...]:
-        """산림청 유아숲체험원 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
+        """유아숲체험원 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
 
         dataset = file_dataset("PBD0000220")
-        data = self._client.files.download(dataset.data_go_id)
+        data = await self._client.files.download(dataset.data_go_id)
         return forest_spatial_points(data, dataset, name=name)
 
-    def traditional_village_forests(
+    async def traditional_village_forests(
         self,
         *,
         name: str | None = None,
     ) -> tuple[ForestSpatialPoint, ...]:
-        """산림청 전통마을숲 위치도 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
+        """전통마을숲 위치 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
 
         dataset = file_dataset("PBD0000077")
-        data = self._client.files.download(dataset.data_go_id)
+        data = await self._client.files.download(dataset.data_go_id)
         return forest_spatial_points(data, dataset, name=name)
 
-    def recreation_forest_arboretums(
+    async def recreation_forest_arboretums(
         self,
         *,
         name: str | None = None,
     ) -> tuple[ForestSpatialPoint, ...]:
-        """산림청 휴양림수목원 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
+        """휴양림 수목원 SHP를 주소와 WGS84 좌표 포함 레코드로 반환한다."""
 
         dataset = file_dataset("PBD0000180")
-        data = self._client.files.download(dataset.data_go_id)
+        data = await self._client.files.download(dataset.data_go_id)
         return forest_spatial_points(data, dataset, name=name)
 
-    def recreation_forests(
+    async def recreation_forests(
         self,
         *,
         name: str | None = None,
         institution_id: str | None = None,
     ) -> tuple[RecreationForest, ...]:
-        """휴양림 파일데이터를 조합해 위치, 주소, 시설, 예약 상세정보를 반환한다."""
+        """휴양림 파일데이터를 조합해 위치, 주소, 시설, 예약 상세를 반환한다."""
 
-        promotion_rows = csv_records(
-            self._client.files.download(RECREATION_FOREST_PROMOTION_ID)
-        )
-        facility_rows = csv_records(self._client.files.download(RECREATION_FOREST_FACILITY_ID))
-        policy_rows = csv_records(self._client.files.download(RECREATION_FOREST_POLICY_ID))
-        reservation_rows = csv_records(
-            self._client.files.download(RECREATION_FOREST_RESERVATION_FILE_ID)
-        )
+        promotion_data = await self._client.files.download(RECREATION_FOREST_PROMOTION_ID)
+        facility_data = await self._client.files.download(RECREATION_FOREST_FACILITY_ID)
+        policy_data = await self._client.files.download(RECREATION_FOREST_POLICY_ID)
+        reservation_data = await self._client.files.download(RECREATION_FOREST_RESERVATION_FILE_ID)
         return build_recreation_forests(
-            promotion_rows,
-            facility_rows,
-            policy_rows,
-            reservation_rows,
+            csv_records(promotion_data),
+            csv_records(facility_data),
+            csv_records(policy_data),
+            csv_records(reservation_data),
             name=name,
             institution_id=institution_id,
         )
@@ -598,7 +567,7 @@ class TravelNamespace:
 class SafetyNamespace:
     _client: ForestClient
 
-    def wildfire_stats(
+    async def wildfire_stats(
         self,
         *,
         search_start_date: str | None = None,
@@ -612,14 +581,14 @@ class SafetyNamespace:
         query = dict(params)
         query["searchStDt"] = search_start_date
         query["searchEdDt"] = search_end_date
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "wildfire_stats",
             query,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def wildfire_risk_forecast(
+    async def wildfire_risk_forecast(
         self,
         *,
         exclude_forecast: bool | int | None = None,
@@ -627,19 +596,19 @@ class SafetyNamespace:
         num_of_rows: int = 10,
         **params: Any,
     ) -> Page[RawRecord]:
-        """전국 산불위험 예보지수 레코드를 조회한다."""
+        """전국 산불위험 예보지도 레코드를 조회한다."""
 
         query = dict(params)
         if exclude_forecast is not None:
             query["excludeForecast"] = int(bool(exclude_forecast))
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "wildfire_risk_forecast",
             query,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def past_landslides(
+    async def past_landslides(
         self,
         *,
         page_no: int = 1,
@@ -648,14 +617,14 @@ class SafetyNamespace:
     ) -> Page[RawRecord]:
         """과거 산사태 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "past_landslides",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def landslide_predictions(
+    async def landslide_predictions(
         self,
         *,
         page_no: int = 1,
@@ -664,46 +633,46 @@ class SafetyNamespace:
     ) -> Page[RawRecord]:
         """산사태 예측정보 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "landslide_predictions",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def landslide_forecast_issues(
+    async def landslide_forecast_issues(
         self,
         *,
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
     ) -> Page[RawRecord]:
-        """산사태 예보발령 레코드를 조회한다."""
+        """산사태 예보 발령 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "landslide_forecast_issues",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def roadside_landslides(
+    async def roadside_landslides(
         self,
         *,
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
     ) -> Page[RawRecord]:
-        """도로변 산사태 예방·복구 레코드를 조회한다."""
+        """임도별 산사태 예방·복구 레코드를 조회한다."""
 
-        return self._client.raw_endpoint(
+        return await self._client.raw_endpoint(
             "roadside_landslides",
             params,
             page_no=page_no,
             num_of_rows=num_of_rows,
         )
 
-    def erosion_control_dams(
+    async def erosion_control_dams(
         self,
         *,
         page_no: int = 1,
@@ -712,16 +681,16 @@ class SafetyNamespace:
     ) -> Page[ErosionControlDam]:
         """사방댐 레코드를 조회한다."""
 
-        return self._client._page(
+        return await self._client._page(
             api_endpoint("erosion_control_dams"),
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
             parse_erosion_control_dam,
         )
 
-    def landslide_risk_map_files(self) -> dict[str, bytes]:
-        """산림청 산사태위험지도 ZIP을 파일명 기준 bytes dict로 반환한다."""
+    async def landslide_risk_map_files(self) -> dict[str, bytes]:
+        """산사태위험지도 ZIP을 파일명 기준 bytes dict로 반환한다."""
 
-        return self._client.files.archive_files("PBD0000210")
+        return await self._client.files.archive_files("PBD0000210")
 
 
 @dataclass(frozen=True, slots=True)
@@ -738,8 +707,8 @@ class FileDataNamespace:
 
         return file_dataset(data_go_id)
 
-    def download_url(self, data_go_id: str) -> str:
-        """상세 페이지에서 data.go.kr 직접 파일 다운로드 URL을 찾는다."""
+    async def download_url(self, data_go_id: str) -> str:
+        """상세 페이지에서 직접 파일 다운로드 URL을 찾는다."""
 
         dataset = file_dataset(data_go_id)
         if dataset.provider == "forest.go.kr":
@@ -751,7 +720,7 @@ class FileDataNamespace:
                     failure_kind="no_data",
                 )
             return dataset.download_url
-        response = _get_detail_page(
+        response = await _get_detail_page(
             self._client._http.session,
             dataset.detail_url,
             timeout=self._client.timeout,
@@ -774,58 +743,39 @@ class FileDataNamespace:
             )
         return _extract_download_url(response.text, base_url=dataset.detail_url)
 
-    def download(self, data_go_id: str, *, max_bytes: int | None = None) -> bytes:
+    async def download(self, data_go_id: str, *, max_bytes: int | None = None) -> bytes:
         """정리된 파일데이터를 다운로드해 bytes로 반환한다."""
 
         dataset = file_dataset(data_go_id)
         if dataset.provider == "forest.go.kr":
-            _submit_forest_go_download_history(
+            await _submit_forest_go_download_history(
                 self._client._http.session,
                 dataset,
                 timeout=self._client.timeout,
             )
-        url = self.download_url(data_go_id)
-        return self._client._http.get_bytes(
+        url = await self.download_url(data_go_id)
+        return await self._client._http.get_bytes(
             url,
             max_bytes=max_bytes,
             provider=dataset.provider,
             endpoint=dataset.data_go_id,
         )
 
-    def archive_files(self, data_go_id: str) -> dict[str, bytes]:
+    async def archive_files(self, data_go_id: str) -> dict[str, bytes]:
         """ZIP 파일데이터를 다운로드한 뒤 파일명 key의 bytes dict로 반환한다."""
 
-        return parse_archive_files(self.download(data_go_id))
+        return parse_archive_files(await self.download(data_go_id))
 
-    def spatial_features(
+    async def spatial_features(
         self,
         data_go_id: str,
         *,
         name: str | None = None,
     ) -> tuple[ForestSpatialFeature, ...]:
-        """SHP/GeoJSON/GPX 파일데이터를 다운로드한 뒤 공간 피처 DTO로 반환한다."""
+        """SHP/GeoJSON/GPX 파일데이터를 공간 feature DTO로 반환한다."""
 
         dataset = file_dataset(data_go_id)
-        return forest_spatial_features(self.download(data_go_id), dataset, name=name)
-
-
-KrForestClient = ForestClient
-PyKrForestClient = ForestClient
-
-
-def _first_env(names: tuple[str, ...]) -> str | None:
-    for name in names:
-        value = _normalize_service_key(os.getenv(name))
-        if value:
-            return value
-    return None
-
-
-def _normalize_service_key(value: str | None) -> str | None:
-    if value is None:
-        return None
-    key = "".join(str(value).split())
-    return key or None
+        return forest_spatial_features(await self.download(data_go_id), dataset, name=name)
 
 
 def _page_params(
@@ -852,8 +802,8 @@ def _yn_value(value: str | bool | None) -> str | None:
     return value
 
 
-def _submit_forest_go_download_history(
-    session: SessionLike,
+async def _submit_forest_go_download_history(
+    session: AsyncSessionLike,
     dataset: FileDataset,
     *,
     timeout: float,
@@ -870,18 +820,15 @@ def _submit_forest_go_download_history(
         "fileNum": dataset.download_path,
         "url": dataset.source_path,
     }
-    try:
-        popup = _forest_go_request_with_retry(
-            lambda: session.get(
-                FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
-                params=popup_params,
-                timeout=timeout,
-            ),
-            dataset=dataset,
-            endpoint=FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
-        )
-    except ForestRequestError:
-        raise
+    popup = await _forest_go_request_with_retry(
+        lambda: session.get(
+            FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
+            params=popup_params,
+            timeout=timeout,
+        ),
+        dataset=dataset,
+        endpoint=FOREST_GO_FILE_DOWNLOAD_POPUP_URL,
+    )
     if int(popup.status_code) >= 400:
         raise ForestRequestError(
             f"HTTP {popup.status_code}: {popup.text[:200]}",
@@ -903,12 +850,12 @@ def _submit_forest_go_download_history(
         "dnldDetlPrps": "",
         "useAgree01": "Y",
     }
-    response = _forest_go_request_with_retry(
+    response = await _forest_go_request_with_retry(
         lambda: session.post(
             FOREST_GO_FILE_DOWNLOAD_HISTORY_URL,
             data=history_data,
             timeout=timeout,
-            allow_redirects=False,
+            follow_redirects=False,
         ),
         dataset=dataset,
         endpoint=FOREST_GO_FILE_DOWNLOAD_HISTORY_URL,
@@ -927,16 +874,16 @@ def _forest_go_tabs(dataset: FileDataset) -> str:
     return "4" if "safety" in dataset.categories else "3"
 
 
-def _forest_go_request_with_retry(
-    request: Callable[[], Any],
+async def _forest_go_request_with_retry(
+    request: Callable[[], Awaitable[ResponseLike]],
     *,
     dataset: FileDataset,
     endpoint: str,
-) -> Any:
+) -> ResponseLike:
     last_exc: Exception | None = None
     for _ in range(3):
         try:
-            return request()
+            return await request()
         except Exception as exc:  # pragma: no cover - network-dependent
             last_exc = exc
     raise ForestRequestError(
@@ -974,9 +921,14 @@ def _extract_download_url(html: str, *, base_url: str) -> str:
     )
 
 
-def _get_detail_page(session: SessionLike, url: str, *, timeout: float) -> Any:
+async def _get_detail_page(
+    session: AsyncSessionLike,
+    url: str,
+    *,
+    timeout: float,
+) -> ResponseLike:
     try:
-        return session.get(url, timeout=timeout)
+        return await session.get(url, timeout=timeout)
     except Exception as exc:
         fallback = url.replace("https://www.data.go.kr/", "http://www.data.go.kr/", 1)
         if fallback == url:
@@ -987,7 +939,7 @@ def _get_detail_page(session: SessionLike, url: str, *, timeout: float) -> Any:
                 failure_kind="network",
             ) from exc
         try:
-            return session.get(fallback, timeout=timeout)
+            return await session.get(fallback, timeout=timeout)
         except Exception as fallback_exc:
             raise ForestRequestError(
                 f"failed to fetch data.go.kr file detail page: {fallback_exc}",

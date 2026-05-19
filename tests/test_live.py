@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 
@@ -12,7 +12,6 @@ pytestmark = pytest.mark.live
 def _service_key() -> str:
     for name in (
         "KRFOREST_SERVICE_KEY",
-        "PYKRFOREST_SERVICE_KEY",
         "KFS_SERVICE_KEY",
         "FOREST_SERVICE_KEY",
         "DATA_GO_SERVICE_KEY",
@@ -24,11 +23,11 @@ def _service_key() -> str:
     pytest.skip("no Korea public-data service key environment variable is set")
 
 
-def test_live_legacy_forest_services_returns_items():
+async def test_live_legacy_forest_services_returns_items():
     key = _service_key()
-    client = ForestClient(key, timeout=20)
+    client = ForestClient(api_key=key, timeout=20)
 
-    page = client.travel.forest_services(num_of_rows=1)
+    page = await client.travel.forest_services(num_of_rows=1)
 
     assert page.page_no >= 1
     assert page.num_of_rows >= 1
@@ -40,23 +39,23 @@ def test_live_legacy_forest_services_returns_items():
     assert page.items
 
 
-def test_live_file_dataset_download_url_is_discoverable():
+async def test_live_file_dataset_download_url_is_discoverable():
     key = _service_key()
-    client = ForestClient(key, timeout=20)
+    client = ForestClient(api_key=key, timeout=20)
 
-    url = client.files.download_url("15112801")
+    url = await client.files.download_url("15112801")
 
     assert url.startswith("https://www.data.go.kr/cmm/cmm/fileDownload.do")
     assert "atchFileId=" in url
     assert "fileDetailSn=" in url
 
 
-def test_live_data_go_safety_endpoint_is_either_authorized_or_clean_auth_error():
+async def test_live_data_go_safety_endpoint_is_either_authorized_or_clean_auth_error():
     key = _service_key()
-    client = ForestClient(key, timeout=20)
+    client = ForestClient(api_key=key, timeout=20)
 
     try:
-        page = client.safety.wildfire_stats(
+        page = await client.safety.wildfire_stats(
             search_start_date="20240101",
             search_end_date="20241231",
             num_of_rows=1,
@@ -71,12 +70,12 @@ def test_live_data_go_safety_endpoint_is_either_authorized_or_clean_auth_error()
         assert page.total_count >= len(page.items)
 
 
-def test_live_mountain_weather_is_either_authorized_or_clean_auth_error():
+async def test_live_mountain_weather_is_either_authorized_or_clean_auth_error():
     key = _service_key()
-    client = ForestClient(key, timeout=20)
+    client = ForestClient(api_key=key, timeout=20)
 
     try:
-        page = client.travel.mountain_weather(num_of_rows=1)
+        page = await client.travel.mountain_weather(num_of_rows=1)
     except ForestAuthError as exc:
         assert exc.provider == "data.go.kr"
         assert exc.failure_kind == "auth"
@@ -90,12 +89,12 @@ def test_live_mountain_weather_is_either_authorized_or_clean_auth_error():
         assert page.total_count >= len(page.items)
 
 
-def test_live_recreation_forest_reservations_is_either_authorized_or_clean_auth_error():
+async def test_live_recreation_forest_reservations_is_either_authorized_or_clean_auth_error():
     key = _service_key()
-    client = ForestClient(key, timeout=20)
+    client = ForestClient(api_key=key, timeout=20)
 
     try:
-        page = client.travel.recreation_forest_reservations(num_of_rows=1)
+        page = await client.travel.recreation_forest_reservations(num_of_rows=1)
     except ForestAuthError as exc:
         assert exc.provider == "data.go.kr"
         assert exc.failure_kind == "auth"
@@ -109,22 +108,22 @@ def test_live_recreation_forest_reservations_is_either_authorized_or_clean_auth_
         assert page.total_count >= len(page.items)
 
 
-def test_live_forest_education_centers_download_and_parse():
+async def test_live_forest_education_centers_download_and_parse():
     key = _service_key()
-    client = ForestClient(key, timeout=30)
+    client = ForestClient(api_key=key, timeout=30)
 
-    records = client.travel.forest_education_centers()
+    records = await client.travel.forest_education_centers()
 
     assert records
     assert records[0].dataset_id == "PBD0000221"
     assert records[0].coordinate is not None
 
 
-def test_live_landslide_risk_map_archive_downloads_files():
+async def test_live_landslide_risk_map_archive_downloads_files():
     key = _service_key()
-    client = ForestClient(key, timeout=30)
+    client = ForestClient(api_key=key, timeout=30)
 
-    files = client.safety.landslide_risk_map_files()
+    files = await client.safety.landslide_risk_map_files()
 
     assert any(name.endswith(".tif") for name in files)
     assert any(name.endswith(".xml") for name in files)

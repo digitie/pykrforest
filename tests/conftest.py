@@ -40,17 +40,20 @@ class FakeSession:
         self.responses = responses
         self.calls: list[dict[str, Any]] = []
 
-    def get(self, url: str, **kwargs: Any) -> FakeResponse:
+    async def get(self, url: str, **kwargs: Any) -> FakeResponse:
         self.calls.append({"url": url, **kwargs})
         if not self.responses:
             raise AssertionError("no fake response left")
         return self.responses.pop(0)
 
-    def post(self, url: str, **kwargs: Any) -> FakeResponse:
+    async def post(self, url: str, **kwargs: Any) -> FakeResponse:
         self.calls.append({"method": "POST", "url": url, **kwargs})
         if not self.responses:
             raise AssertionError("no fake response left")
         return self.responses.pop(0)
+
+    async def aclose(self) -> None:
+        return None
 
 
 def public_payload(
@@ -111,7 +114,7 @@ def xml_payload(
 def fake_client_factory() -> Any:
     def factory(*responses: FakeResponse, **kwargs: Any) -> tuple[ForestClient, FakeSession]:
         session = FakeSession(list(responses))
-        client = ForestClient("TEST_KEY", session=session, **kwargs)
+        client = ForestClient(api_key="TEST_KEY", session=session, **kwargs)
         return client, session
 
     return factory

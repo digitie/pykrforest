@@ -4,6 +4,19 @@ This document records the implemented scope. The initial data.go.kr search for
 `산림청` returned hundreds of datasets; python-krforest-api narrows that to travel,
 outdoor recreation, wildfire, landslide, and forest safety data.
 
+## Client API Shape
+
+- The public client is `httpx`/`asyncio` based and follows the
+  `python-krheritage-api` style: create `ForestClient(api_key=...)` or
+  `ForestClient.from_env()`, use `async with`, and call public methods with
+  `await client.travel...`, `await client.safety...`, or `await client.files...`.
+- Compatibility shims for older sync usage are intentionally not provided here;
+  downstream consumers such as `python-krtour-map` should use the stabilized
+  async public API directly.
+- Supported key environment variables are `KRFOREST_SERVICE_KEY`,
+  `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`, `DATA_GO_SERVICE_KEY`, and
+  `TRIPMATE_DATA_GO_SERVICE_KEY`.
+
 ## Implemented OpenAPI Endpoints
 
 | Key | Category | Provider | data.go.kr | Operation |

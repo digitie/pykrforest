@@ -1,4 +1,4 @@
-# AGENTS.md
+﻿# AGENTS.md
 
 이 문서는 `python-krforest-api`에서 Codex/agent가 작업할 때 따라야 할 최소 지침입니다.
 작업 방식은 `pykma`, `pyopinet`, `pykex`의 패턴을 따른다.
@@ -22,7 +22,7 @@
 - 넓은 생물 표본, 임업경제, 법령해석, 사업자 등록, 행정 통계 데이터는 기본
   범위에서 제외한다.
 - Python 지원 기준은 `pyproject.toml`의 `requires-python`을 따른다.
-- HTTP 의존성은 `requests`, 공개 반환 모델은 `pydantic` 기반 frozen 모델을
+- HTTP 의존성은 `httpx`와 `asyncio`, 공개 반환 모델은 `pydantic` 기반 frozen 모델을
   사용한다.
 - 기본 단위 테스트는 네트워크를 호출하지 않아야 한다.
 
@@ -34,7 +34,7 @@
 - TripMate나 `python-krtour-map`에서 필요한 endpoint, pagination, cursor, exception, raw payload 계약이 부족하면 이 저장소의 public API를 먼저 안정화한다.
 - 다른 라이브러리에 검증된 구현이 있으면 wrapper로 감싸지 말고 라이선스와 출처를 확인한 뒤 현재 구조에 직접 반영한다.
 - API 키를 커밋하지 않는다. `TRIPMATE_DATA_GO_SERVICE_KEY`,
-  `KRFOREST_SERVICE_KEY`, `PYKRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`,
+  `KRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`,
   `DATA_GO_SERVICE_KEY`는 로컬 환경변수로만 사용한다.
 - API 키를 로그, fixture, 예외 메시지, repr, 문서에 남기지 않는다.
 - 문서에서 파일 위치를 쓸 때는 프로젝트 루트 기준 상대 경로만 쓴다.

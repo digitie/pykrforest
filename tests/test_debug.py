@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 
@@ -10,7 +10,7 @@ from krforest.debug import jsonable, redact_sensitive, slugify
 from .conftest import FakeResponse, public_payload
 
 
-def test_save_fixture_redacts_sensitive_values_and_blocks_overwrite(tmp_path):
+async def test_save_fixture_redacts_sensitive_values_and_blocks_overwrite(tmp_path):
     path = save_fixture(
         base_dir=tmp_path,
         function_name="wildfire_stats",
@@ -47,11 +47,11 @@ def test_save_fixture_redacts_sensitive_values_and_blocks_overwrite(tmp_path):
         )
 
 
-def test_debug_endpoint_returns_debug_run_without_service_key(fake_client_factory):
+async def test_debug_endpoint_returns_debug_run_without_service_key(fake_client_factory):
     payload = public_payload({"doname": "전국", "meanavg": "27"}, total_count=1)
     client, _session = fake_client_factory(FakeResponse(payload))
 
-    run = client.debug_endpoint(
+    run = await client.debug_endpoint(
         "wildfire_risk_forecast",
         {"excludeForecast": 1},
         num_of_rows=1,
@@ -73,7 +73,7 @@ def test_debug_endpoint_returns_debug_run_without_service_key(fake_client_factor
     assert data["trace"][-1] == "success"
 
 
-def test_redact_sensitive_and_slugify_are_recursive():
+async def test_redact_sensitive_and_slugify_are_recursive():
     value = {
         "nested": [{"x-api-key": "SECRET"}],
         "public": "ok",

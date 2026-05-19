@@ -15,7 +15,8 @@ from .catalog import (
     file_catalog,
     file_datasets,
 )
-from .client import ForestClient, KrForestClient, PyKrForestClient
+from .client import ForestClient
+from .config import ForestConfig
 from .debug import DebugRun, jsonable, redact_sensitive, save_fixture
 from .exceptions import (
     ForestApiError,
@@ -42,8 +43,12 @@ from .models import (
     StandardRecreationForest,
 )
 
+__version__ = "0.1.0"
+PROVIDER_NAME = "python-krforest-api"
+
 __all__ = [
     "API_ENDPOINTS",
+    "PROVIDER_NAME",
     "Address",
     "DATA_GO_API_ACCOUNT_URL",
     "FILE_DATASETS",
@@ -53,6 +58,7 @@ __all__ = [
     "DebugRun",
     "ErosionControlDam",
     "FileDataset",
+    "ForestConfig",
     "ForestSpatialFeature",
     "ForestSpatialPoint",
     "ForestApiError",
@@ -63,15 +69,14 @@ __all__ = [
     "ForestRateLimitError",
     "ForestRequestError",
     "ForestServerError",
-    "KrForestClient",
     "MountainWeather",
     "Page",
     "PlaceCoordinate",
-    "PyKrForestClient",
     "RawRecord",
     "RecreationForest",
     "RecreationForestReservation",
     "StandardRecreationForest",
+    "__version__",
     "api_catalog",
     "api_endpoints",
     "catalog_entries",

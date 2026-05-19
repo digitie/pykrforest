@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import pytest
 from kraddr.base import Address, PlaceCoordinate
@@ -83,7 +83,7 @@ def binary_zip(tmp_path) -> bytes:
     return archive_path.read_bytes()
 
 
-def test_legacy_xml_endpoint_sends_service_key_and_parses_page(fake_client_factory):
+async def test_legacy_xml_endpoint_sends_service_key_and_parses_page(fake_client_factory):
     xml = xml_payload(
         """
         <item>
@@ -95,7 +95,7 @@ def test_legacy_xml_endpoint_sends_service_key_and_parses_page(fake_client_facto
     )
     client, session = fake_client_factory(FakeResponse(text=xml))
 
-    page = client.travel.forest_services(num_of_rows=1)
+    page = await client.travel.forest_services(num_of_rows=1)
 
     call = session.calls[0]
     assert call["url"].endswith("/trailInfoService/getforestservice")
@@ -109,14 +109,14 @@ def test_legacy_xml_endpoint_sends_service_key_and_parses_page(fake_client_facto
     assert "TEST_KEY" not in repr(page.context.request_params)
 
 
-def test_data_go_json_endpoint_adds_type_and_parses_items(fake_client_factory):
+async def test_data_go_json_endpoint_adds_type_and_parses_items(fake_client_factory):
     payload = public_payload(
         [{"doname": "전국", "meanavg": "27"}, {"doname": "서울", "meanavg": "22"}],
         total_count=2,
     )
     client, session = fake_client_factory(FakeResponse(payload))
 
-    page = client.safety.wildfire_risk_forecast(exclude_forecast=True, num_of_rows=2)
+    page = await client.safety.wildfire_risk_forecast(exclude_forecast=True, num_of_rows=2)
 
     call = session.calls[0]
     assert call["url"].endswith("/forestPoint/forestPointListGeongugSearch")
@@ -128,7 +128,7 @@ def test_data_go_json_endpoint_adds_type_and_parses_items(fake_client_factory):
     assert "ServiceKey" not in page.context.request_params
 
 
-def test_standard_recreation_forests_uses_type_param_and_models(fake_client_factory):
+async def test_standard_recreation_forests_uses_type_param_and_models(fake_client_factory):
     payload = public_payload(
         {
             "rcrfrstNm": "가리산자연휴양림",
@@ -152,7 +152,7 @@ def test_standard_recreation_forests_uses_type_param_and_models(fake_client_fact
     )
     client, session = fake_client_factory(FakeResponse(payload))
 
-    page = client.travel.standard_recreation_forests(
+    page = await client.travel.standard_recreation_forests(
         sido_name="강원특별자치도",
         accommodation_available=True,
         num_of_rows=1,
@@ -173,10 +173,10 @@ def test_standard_recreation_forests_uses_type_param_and_models(fake_client_fact
     assert item.raw["instt_code"] == "4250000"
 
 
-def test_wildfire_stats_maps_date_arguments(fake_client_factory):
+async def test_wildfire_stats_maps_date_arguments(fake_client_factory):
     client, session = fake_client_factory(FakeResponse(public_payload([])))
 
-    client.safety.wildfire_stats(
+    await client.safety.wildfire_stats(
         search_start_date="20240101",
         search_end_date="20241231",
         num_of_rows=1,
@@ -187,7 +187,7 @@ def test_wildfire_stats_maps_date_arguments(fake_client_factory):
     assert params["searchEdDt"] == "20241231"
 
 
-def test_client_catalog_returns_human_readable_entries(fake_client_factory):
+async def test_client_catalog_returns_human_readable_entries(fake_client_factory):
     client, _session = fake_client_factory()
 
     entries = client.catalog("travel")
@@ -199,47 +199,47 @@ def test_client_catalog_returns_human_readable_entries(fake_client_factory):
     )
 
 
-def test_mountain_weather_returns_place_coordinate(fake_client_factory):
+async def test_mountain_weather_returns_place_coordinate(fake_client_factory):
     payload = public_payload(
         {"stationName": "관악산", "xValue": "126.9636", "yValue": "37.4450"},
         total_count=1,
     )
     client, _session = fake_client_factory(FakeResponse(payload))
 
-    page = client.travel.mountain_weather(num_of_rows=1)
+    page = await client.travel.mountain_weather(num_of_rows=1)
 
     assert isinstance(page.items[0].coordinate, PlaceCoordinate)
     assert page.items[0].coordinate == PlaceCoordinate(lat=37.445, lon=126.9636)
     assert page.items[0].raw["stationName"] == "관악산"
 
 
-def test_mountain_weather_missing_coordinate_is_none(fake_client_factory):
+async def test_mountain_weather_missing_coordinate_is_none(fake_client_factory):
     payload = public_payload(
         {"stationName": "관악산", "xValue": "-99.000000", "yValue": "-99.000000"},
         total_count=1,
     )
     client, _session = fake_client_factory(FakeResponse(payload))
 
-    page = client.travel.mountain_weather(num_of_rows=1)
+    page = await client.travel.mountain_weather(num_of_rows=1)
 
     assert page.items[0].coordinate is None
     assert page.items[0].raw["stationName"] == "관악산"
 
 
-def test_erosion_control_dams_returns_place_coordinate(fake_client_factory):
+async def test_erosion_control_dams_returns_place_coordinate(fake_client_factory):
     payload = public_payload(
         {"name": "테스트사방댐", "longitude": "127.1", "latitude": "37.2"},
         total_count=1,
     )
     client, _session = fake_client_factory(FakeResponse(payload))
 
-    page = client.safety.erosion_control_dams(num_of_rows=1)
+    page = await client.safety.erosion_control_dams(num_of_rows=1)
 
     assert page.items[0].coordinate == PlaceCoordinate(lat=37.2, lon=127.1)
     assert page.items[0].raw["name"] == "테스트사방댐"
 
 
-def test_recreation_forest_reservations_uses_lowercase_service_key(fake_client_factory):
+async def test_recreation_forest_reservations_uses_lowercase_service_key(fake_client_factory):
     xml = xml_payload(
         """
         <item>
@@ -254,7 +254,7 @@ def test_recreation_forest_reservations_uses_lowercase_service_key(fake_client_f
     )
     client, session = fake_client_factory(FakeResponse(text=xml))
 
-    page = client.travel.recreation_forest_reservations(
+    page = await client.travel.recreation_forest_reservations(
         goods_name="숲속의집",
         start_stay_date="20240228",
         end_stay_date="20240228",
@@ -280,7 +280,7 @@ def test_recreation_forest_reservations_uses_lowercase_service_key(fake_client_f
     assert page.items[0].status == "예약가능"
 
 
-def test_recreation_forests_combines_files_with_address_and_coordinate(fake_client_factory):
+async def test_recreation_forests_combines_files_with_address_and_coordinate(fake_client_factory):
     promotion_csv = (
         "기관ID,기관명,주소,전화번호,최대수용인원,운영시간,설명\n"
         "FR001,덕유산자연휴양림,전북 무주군 무풍면 구천동로 530-62,"
@@ -307,7 +307,7 @@ def test_recreation_forests_combines_files_with_address_and_coordinate(fake_clie
         FakeResponse(text=reservation_csv, content=reservation_csv.encode()),
     )
 
-    forests = client.travel.recreation_forests()
+    forests = await client.travel.recreation_forests()
 
     assert [call["url"] for call in session.calls[::2]] == [
         "https://www.data.go.kr/data/15064415/fileData.do",
@@ -328,7 +328,7 @@ def test_recreation_forests_combines_files_with_address_and_coordinate(fake_clie
     assert forest.reservation_records[0].goods_name == "숲속의집"
 
 
-def test_iter_pages_uses_page_metadata(fake_client_factory):
+async def test_iter_pages_uses_page_metadata(fake_client_factory):
     client, session = fake_client_factory(
         FakeResponse(
             xml_payload("<item><id>1</id></item>", page_no=1, num_of_rows=1, total_count=2)
@@ -338,14 +338,14 @@ def test_iter_pages_uses_page_metadata(fake_client_factory):
         ),
     )
 
-    pages = list(client.iter_pages(client.travel.forest_services, num_of_rows=1))
+    pages = [page async for page in client.iter_pages(client.travel.forest_services, num_of_rows=1)]
 
     assert [page.page_no for page in pages] == [1, 2]
     assert [page.items[0]["id"] for page in pages] == ["1", "2"]
     assert [call["params"]["pageNo"] for call in session.calls] == [1, 2]
 
 
-def test_page_helpers():
+async def test_page_helpers():
     page = Page(items=(1, 2), total_count=3, page_no=1, num_of_rows=2, raw={})
 
     assert page.has_next_page is True
@@ -353,18 +353,18 @@ def test_page_helpers():
     assert page.is_empty is False
 
 
-def test_auth_error_redacts_key(fake_client_factory):
+async def test_auth_error_redacts_key(fake_client_factory):
     client, _session = fake_client_factory(FakeResponse(status_code=403, text="Forbidden TEST_KEY"))
 
     with pytest.raises(ForestAuthError) as exc_info:
-        client.travel.forest_services()
+        await client.travel.forest_services()
 
     assert "[redacted]" in str(exc_info.value)
     assert "TEST_KEY" not in str(exc_info.value)
     assert exc_info.value.failure_kind == "auth"
 
 
-def test_file_download_url_from_json_ld(fake_client_factory):
+async def test_file_download_url_from_json_ld(fake_client_factory):
     html = """
     <html><head>
       <script type="application/ld+json">
@@ -379,8 +379,8 @@ def test_file_download_url_from_json_ld(fake_client_factory):
         FakeResponse(text="id,name\n1,trail\n", content=b"id,name\n1,trail\n"),
     )
 
-    url = client.files.download_url("15112801")
-    data = client.files.download("15112801")
+    url = await client.files.download_url("15112801")
+    data = await client.files.download("15112801")
 
     assert url.endswith("atchFileId=FILE_1&fileDetailSn=1")
     assert data.startswith(b"id,name")
@@ -389,14 +389,14 @@ def test_file_download_url_from_json_ld(fake_client_factory):
     assert session.calls[2]["url"].endswith("atchFileId=FILE_1&fileDetailSn=1")
 
 
-def test_forest_go_shp_download_submits_personal_purpose(fake_client_factory):
+async def test_forest_go_shp_download_submits_personal_purpose(fake_client_factory):
     client, session = fake_client_factory(
         FakeResponse(text="<html>popup</html>"),
         FakeResponse(status_code=302, text="moved"),
         FakeResponse(content=b"PK\x03\x04zip"),
     )
 
-    data = client.files.download("PBD0000220")
+    data = await client.files.download("PBD0000220")
 
     popup_call, history_call, download_call = session.calls
     assert popup_call["url"].endswith("/fileDownloadPopup.do")
@@ -410,7 +410,7 @@ def test_forest_go_shp_download_submits_personal_purpose(fake_client_factory):
     assert data == b"PK\x03\x04zip"
 
 
-def test_safety_forest_go_download_uses_safety_tab_and_returns_archive_files(
+async def test_safety_forest_go_download_uses_safety_tab_and_returns_archive_files(
     fake_client_factory,
     tmp_path,
 ):
@@ -421,7 +421,7 @@ def test_safety_forest_go_download_uses_safety_tab_and_returns_archive_files(
         FakeResponse(content=archive),
     )
 
-    files = client.safety.landslide_risk_map_files()
+    files = await client.safety.landslide_risk_map_files()
 
     popup_call, history_call, download_call = session.calls
     assert popup_call["params"]["pblicDataId"] == "PBD0000210"
@@ -433,7 +433,7 @@ def test_safety_forest_go_download_uses_safety_tab_and_returns_archive_files(
     assert files["risk.tif.xml"] == b"<metadata />"
 
 
-def test_forest_education_centers_parse_shp(fake_client_factory, tmp_path):
+async def test_forest_education_centers_parse_shp(fake_client_factory, tmp_path):
     archive = shp_zip(tmp_path)
     client, _session = fake_client_factory(
         FakeResponse(text="<html>popup</html>"),
@@ -441,7 +441,7 @@ def test_forest_education_centers_parse_shp(fake_client_factory, tmp_path):
         FakeResponse(content=archive),
     )
 
-    records = client.travel.forest_education_centers(name="테스트")
+    records = await client.travel.forest_education_centers(name="테스트")
 
     assert len(records) == 1
     assert records[0].dataset_id == "PBD0000221"
@@ -450,7 +450,7 @@ def test_forest_education_centers_parse_shp(fake_client_factory, tmp_path):
     assert isinstance(records[0].coordinate, PlaceCoordinate)
 
 
-def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
+async def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
     fake_client_factory,
     tmp_path,
 ):
@@ -461,7 +461,7 @@ def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
         FakeResponse(content=archive),
     )
 
-    records = client.travel.kid_forest_centers(name="테스트")
+    records = await client.travel.kid_forest_centers(name="테스트")
 
     assert len(records) == 1
     record = records[0]
@@ -475,7 +475,7 @@ def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
     assert 37.0 < record.coordinate.lat < 38.0
 
 
-def test_dulle_trail_features_parse_line_shp(fake_client_factory, tmp_path):
+async def test_dulle_trail_features_parse_line_shp(fake_client_factory, tmp_path):
     archive = line_shp_zip(tmp_path)
     client, _session = fake_client_factory(
         FakeResponse(text="<html>popup</html>"),
@@ -483,7 +483,7 @@ def test_dulle_trail_features_parse_line_shp(fake_client_factory, tmp_path):
         FakeResponse(content=archive),
     )
 
-    features = client.travel.dulle_trail_features(name="지리산")
+    features = await client.travel.dulle_trail_features(name="지리산")
 
     assert len(features) == 1
     feature = features[0]
@@ -497,8 +497,8 @@ def test_dulle_trail_features_parse_line_shp(fake_client_factory, tmp_path):
     assert 37.0 < feature.coordinate.lat < 38.0
 
 
-def test_file_download_url_missing_content_url_raises(fake_client_factory):
+async def test_file_download_url_missing_content_url_raises(fake_client_factory):
     client, _session = fake_client_factory(FakeResponse(text="<html></html>"))
 
     with pytest.raises(ForestNoDataError):
-        client.files.download_url("15112801")
+        await client.files.download_url("15112801")

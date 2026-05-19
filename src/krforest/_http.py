@@ -1,4 +1,4 @@
-"""산림청과 data.go.kr API용 HTTP helper."""
+"""산림청과 data.go.kr API 비동기 HTTP helper."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
+
+import httpx
 
 from ._convert import (
     mask_params,
@@ -16,6 +18,7 @@ from ._convert import (
     without_none,
     xml_to_dict,
 )
+from ._ratelimit import AsyncTokenBucket
 from .exceptions import (
     ForestAuthError,
     ForestNoDataError,
@@ -27,16 +30,6 @@ from .exceptions import (
 from .models import CallContext
 
 
-def _load_requests() -> Any:
-    try:
-        import requests
-    except ModuleNotFoundError as exc:  # pragma: no cover
-        raise ForestRequestError(
-            "requests is required; install python-krforest-api dependencies"
-        ) from exc
-    return requests
-
-
 class ResponseLike(Protocol):
     status_code: int
     text: str
@@ -45,24 +38,28 @@ class ResponseLike(Protocol):
     def json(self) -> Any: ...
 
 
-class SessionLike(Protocol):
-    def get(self, url: str, **kwargs: Any) -> ResponseLike: ...
+class AsyncSessionLike(Protocol):
+    async def get(self, url: str, **kwargs: Any) -> ResponseLike: ...
 
-    def post(self, url: str, **kwargs: Any) -> ResponseLike: ...
+    async def post(self, url: str, **kwargs: Any) -> ResponseLike: ...
+
+    async def aclose(self) -> None: ...
 
 
-def _new_session() -> SessionLike:
-    requests = _load_requests()
-    session = requests.Session()
-    session.headers.update(
-        {
-            "User-Agent": (
-                "Mozilla/5.0 (compatible; krforest/0.1; "
-                "+https://github.com/digitie/python-krforest-api)"
-            )
-        }
+def _new_session(timeout: float) -> AsyncSessionLike:
+    return cast(
+        AsyncSessionLike,
+        httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; krforest/0.1; "
+                    "+https://github.com/digitie/python-krforest-api)"
+                )
+            },
+        ),
     )
-    return cast(SessionLike, session)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,27 +74,36 @@ class NormalizedPayload:
 
 
 class ForestHttp:
-    """data.go.kr와 forest.go.kr 응답 envelope를 처리하는 저수준 HTTP 클라이언트."""
+    """data.go.kr와 forest.go.kr 응답 envelope를 처리하는 비동기 HTTP 클라이언트."""
 
     def __init__(
         self,
-        service_key: str,
+        api_key: str,
         *,
         timeout: float = 10.0,
-        session: SessionLike | None = None,
+        session: AsyncSessionLike | None = None,
         service_key_param: str = "ServiceKey",
+        max_rps: float | None = 5.0,
     ) -> None:
-        service_key = "".join(str(service_key).split())
-        if not service_key:
-            raise ForestAuthError("service_key is required", failure_kind="auth")
+        api_key = "".join(str(api_key).split())
+        if not api_key:
+            raise ForestAuthError("api_key is required", failure_kind="auth")
         if not service_key_param:
             raise ValueError("service_key_param must not be empty")
-        self.service_key = service_key
+        self.api_key = api_key
         self.timeout = timeout
-        self.session = session or _new_session()
+        self.session = session or _new_session(timeout)
+        self._owns_session = session is None
         self.service_key_param = service_key_param
+        self._rate_limiter = AsyncTokenBucket(max_rps=max_rps) if max_rps is not None else None
 
-    def get(
+    async def aclose(self) -> None:
+        """내부에서 만든 HTTP 세션을 닫는다."""
+
+        if self._owns_session:
+            await self.session.aclose()
+
+    async def get(
         self,
         url: str,
         params: dict[str, Any] | None = None,
@@ -109,7 +115,7 @@ class ForestHttp:
         response_type_param: str | None = None,
     ) -> NormalizedPayload:
         key_param = service_key_param or self.service_key_param
-        query: dict[str, Any] = {key_param: self.service_key}
+        query: dict[str, Any] = {key_param: self.api_key}
         if provider == "data.go.kr" and response_format.lower() == "json":
             query[response_type_param or "_type"] = "json"
         if params:
@@ -122,12 +128,28 @@ class ForestHttp:
             request_params=public_params(query),
             collected_at=datetime.now(UTC),
         )
-        response = self.session.get(url, params=without_none(query), timeout=self.timeout)
+        if self._rate_limiter is not None:
+            await self._rate_limiter.acquire()
+        try:
+            response = await self.session.get(
+                url,
+                params=without_none(query),
+                timeout=self.timeout,
+            )
+        except httpx.HTTPError as exc:
+            message = redact_secret(str(exc), self.api_key)
+            raise ForestRequestError(
+                f"request failed: {message}",
+                provider=provider,
+                endpoint=endpoint,
+                params=mask_params(query),
+                failure_kind="network",
+            ) from exc
         _raise_for_status(
             response,
             provider=provider,
             endpoint=endpoint,
-            service_key=self.service_key,
+            api_key=self.api_key,
             params=query,
         )
 
@@ -135,7 +157,7 @@ class ForestHttp:
             response,
             provider=provider,
             endpoint=endpoint,
-            service_key=self.service_key,
+            api_key=self.api_key,
             response_format=response_format,
         )
         return _normalize_payload(
@@ -145,7 +167,7 @@ class ForestHttp:
             context=safe_context,
         )
 
-    def get_bytes(
+    async def get_bytes(
         self,
         url: str,
         *,
@@ -153,12 +175,23 @@ class ForestHttp:
         provider: str = "data.go.kr",
         endpoint: str | None = None,
     ) -> bytes:
-        response = self.session.get(url, timeout=self.timeout)
+        if self._rate_limiter is not None:
+            await self._rate_limiter.acquire()
+        try:
+            response = await self.session.get(url, timeout=self.timeout)
+        except httpx.HTTPError as exc:
+            message = redact_secret(str(exc), self.api_key)
+            raise ForestRequestError(
+                f"request failed: {message}",
+                provider=provider,
+                endpoint=endpoint or url,
+                failure_kind="network",
+            ) from exc
         _raise_for_status(
             response,
             provider=provider,
             endpoint=endpoint or url,
-            service_key=self.service_key,
+            api_key=self.api_key,
             params={},
         )
         data = getattr(response, "content", b"")
@@ -173,7 +206,7 @@ def _decode_payload(
     *,
     provider: str,
     endpoint: str,
-    service_key: str,
+    api_key: str,
     response_format: str,
 ) -> dict[str, Any]:
     text = response.text.strip()
@@ -183,7 +216,7 @@ def _decode_payload(
             payload = response.json()
         except ValueError:
             if not text.startswith("<"):
-                message = redact_secret(text[:300], service_key)
+                message = redact_secret(text[:300], api_key)
                 raise ForestParseError(
                     f"response was not valid JSON: {message}",
                     provider=provider,
@@ -204,14 +237,14 @@ def _decode_payload(
         try:
             return xml_to_dict(text)
         except Exception as exc:
-            message = redact_secret(str(exc), service_key)
+            message = redact_secret(str(exc), api_key)
             raise ForestParseError(
                 f"response was not valid XML: {message}",
                 provider=provider,
                 endpoint=endpoint,
                 failure_kind="parse",
             ) from exc
-    message = redact_secret(text[:300], service_key)
+    message = redact_secret(text[:300], api_key)
     raise ForestParseError(
         f"unsupported response body: {message}",
         provider=provider,
@@ -298,11 +331,11 @@ def _raise_for_status(
     *,
     provider: str,
     endpoint: str,
-    service_key: str,
+    api_key: str,
     params: dict[str, Any],
 ) -> None:
     status = int(response.status_code)
-    text = redact_secret(response.text, service_key)[:300]
+    text = redact_secret(response.text, api_key)[:300]
     kwargs: dict[str, Any] = {
         "provider": provider,
         "endpoint": endpoint,
