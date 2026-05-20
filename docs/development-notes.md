@@ -47,6 +47,17 @@ print(Path("AGENTS.md").read_text(encoding="utf-8")[:200])
 '@ | python -
 ```
 
+## Pytest 수집
+
+이 WSL/Windows 마운트 환경에서는 `python -m pytest`가 `testpaths = ["tests"]`를
+사용하는 기본 실행에서 0개 테스트를 수집한 뒤 capture 정리 중 `FileNotFoundError`를
+낼 수 있다. 이 경우 테스트 파일은 그대로 두고 수집 대상을 명시해 실행한다.
+
+```bash
+python -m pytest -s tests
+python -m pytest -s -m live tests/test_live.py
+```
+
 ## 문서 작성 기준
 
 - 저장소 문서의 파일 위치 정보는 `src/krforest/client.py`처럼 프로젝트 기준 상대

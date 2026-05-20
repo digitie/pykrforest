@@ -87,6 +87,9 @@
   인코딩을 명시한다. 단순 코드 수정은 가능하면 `apply_patch`를 사용한다.
 - 한글 표시 검증이 필요하면 Python의 `Path.read_text(encoding="utf-8")`로 읽어
   실제 파일 내용과 터미널 표시 문제를 구분한다.
+- 이 WSL/Windows 마운트 환경에서는 `python -m pytest`가 기본 `testpaths` 실행에서
+  0개 테스트를 수집한 뒤 capture 정리 중 `FileNotFoundError`를 낼 수 있다. 이때는
+  `python -m pytest -s tests`처럼 수집 대상을 명시해서 재실행한다.
 
 ## 구현 규칙
 

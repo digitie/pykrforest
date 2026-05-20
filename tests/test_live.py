@@ -8,6 +8,8 @@ from krforest import ForestAuthError, ForestClient
 
 pytestmark = pytest.mark.live
 
+LIVE_TIMEOUT = 60
+
 
 def _service_key() -> str:
     for name in (
@@ -25,7 +27,7 @@ def _service_key() -> str:
 
 async def test_live_legacy_forest_services_returns_items():
     key = _service_key()
-    client = ForestClient(api_key=key, timeout=20)
+    client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
 
     page = await client.travel.forest_services(num_of_rows=1)
 
@@ -41,7 +43,7 @@ async def test_live_legacy_forest_services_returns_items():
 
 async def test_live_file_dataset_download_url_is_discoverable():
     key = _service_key()
-    client = ForestClient(api_key=key, timeout=20)
+    client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
 
     url = await client.files.download_url("15112801")
 
@@ -52,7 +54,7 @@ async def test_live_file_dataset_download_url_is_discoverable():
 
 async def test_live_data_go_safety_endpoint_is_either_authorized_or_clean_auth_error():
     key = _service_key()
-    client = ForestClient(api_key=key, timeout=20)
+    client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
 
     try:
         page = await client.safety.wildfire_stats(
@@ -72,7 +74,7 @@ async def test_live_data_go_safety_endpoint_is_either_authorized_or_clean_auth_e
 
 async def test_live_mountain_weather_is_either_authorized_or_clean_auth_error():
     key = _service_key()
-    client = ForestClient(api_key=key, timeout=20)
+    client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
 
     try:
         page = await client.travel.mountain_weather(num_of_rows=1)
@@ -91,7 +93,7 @@ async def test_live_mountain_weather_is_either_authorized_or_clean_auth_error():
 
 async def test_live_recreation_forest_reservations_is_either_authorized_or_clean_auth_error():
     key = _service_key()
-    client = ForestClient(api_key=key, timeout=20)
+    client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
 
     try:
         page = await client.travel.recreation_forest_reservations(num_of_rows=1)
@@ -110,7 +112,7 @@ async def test_live_recreation_forest_reservations_is_either_authorized_or_clean
 
 async def test_live_forest_education_centers_download_and_parse():
     key = _service_key()
-    client = ForestClient(api_key=key, timeout=30)
+    client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
 
     records = await client.travel.forest_education_centers()
 
@@ -121,7 +123,7 @@ async def test_live_forest_education_centers_download_and_parse():
 
 async def test_live_landslide_risk_map_archive_downloads_files():
     key = _service_key()
-    client = ForestClient(api_key=key, timeout=30)
+    client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
 
     files = await client.safety.landslide_risk_map_files()
 

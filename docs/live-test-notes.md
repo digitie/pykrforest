@@ -20,3 +20,18 @@ Expected outcomes with the checked tripmate key on 2026-05-08:
 - No supported service-key environment variable was set, so all 7 live tests
   were selected and skipped with `no Korea public-data service key environment
   variable is set`.
+
+2026-05-20 service-key live check:
+
+- A local `.env` with `KRFOREST_SERVICE_KEY` was used. Do not commit the key
+  value.
+- `api.forest.go.kr` legacy trail service and the data.go.kr national recreation
+  forest reservation API both returned normal payloads, but were slow enough to
+  intermittently exceed the previous 20 second live-test timeout.
+- `tests/test_live.py` now uses a 60 second timeout for opt-in live clients so
+  transient public API latency does not mask the client contract.
+- `/tmp/krforest-live-venv/bin/python -m pytest -s -m live tests/test_live.py`
+  completed with 5 passed and 2 xfailed in 47.28 seconds.
+- The xfailed endpoints were `apis.data.go.kr/1400000/forestStusService`
+  wildfire stats and `apis.data.go.kr/1400377/mtweather` mountain weather, both
+  reporting the existing per-API approval-needed path for this key.
