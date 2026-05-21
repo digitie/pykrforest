@@ -13,9 +13,8 @@ outdoor recreation, wildfire, landslide, and forest safety data.
 - Compatibility shims for older sync usage are intentionally not provided here;
   downstream consumers such as `python-krtour-map` should use the stabilized
   async public API directly.
-- Supported key environment variables are `KRFOREST_SERVICE_KEY`,
-  `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`, `DATA_GO_SERVICE_KEY`, and
-  `TRIPMATE_DATA_GO_SERVICE_KEY`.
+- The supported key environment variable is `DATA_GO_KR_SERVICE_KEY`. Legacy
+  fallback environment variable names are intentionally not supported.
 
 ## Implemented OpenAPI Endpoints
 

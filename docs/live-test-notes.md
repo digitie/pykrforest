@@ -3,7 +3,7 @@
 Run with:
 
 ```powershell
-$env:KRFOREST_SERVICE_KEY = "<data.go.kr key>"
+$env:DATA_GO_KR_SERVICE_KEY = "<data.go.kr key>"
 pytest -m live
 ```
 
@@ -18,13 +18,12 @@ Expected outcomes with the checked tripmate key on 2026-05-08:
 
 - `python -m pytest -m live` was executed in the local environment.
 - No supported service-key environment variable was set, so all 7 live tests
-  were selected and skipped with `no Korea public-data service key environment
-  variable is set`.
+  were selected and skipped.
 
 2026-05-20 service-key live check:
 
-- A local `.env` with `KRFOREST_SERVICE_KEY` was used. Do not commit the key
-  value.
+- A local `.env` with the then-supported service-key variable was used. Do not
+  commit the key value.
 - `api.forest.go.kr` legacy trail service and the data.go.kr national recreation
   forest reservation API both returned normal payloads, but were slow enough to
   intermittently exceed the previous 20 second live-test timeout.
@@ -35,3 +34,11 @@ Expected outcomes with the checked tripmate key on 2026-05-08:
 - The xfailed endpoints were `apis.data.go.kr/1400000/forestStusService`
   wildfire stats and `apis.data.go.kr/1400377/mtweather` mountain weather, both
   reporting the existing per-API approval-needed path for this key.
+
+2026-05-21 service-key environment rename:
+
+- `ForestClient.from_env()` and live tests now read only
+  `DATA_GO_KR_SERVICE_KEY`.
+- Legacy fallback names such as `KRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`,
+  `FOREST_SERVICE_KEY`, `DATA_GO_SERVICE_KEY`, and
+  `TRIPMATE_DATA_GO_SERVICE_KEY` are no longer supported.

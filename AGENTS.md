@@ -33,9 +33,11 @@
 - 단순 전달용 wrapper, 장기 호환 alias, 임시 facade를 만들지 않는다.
 - TripMate나 `python-krtour-map`에서 필요한 endpoint, pagination, cursor, exception, raw payload 계약이 부족하면 이 저장소의 public API를 먼저 안정화한다.
 - 다른 라이브러리에 검증된 구현이 있으면 wrapper로 감싸지 말고 라이선스와 출처를 확인한 뒤 현재 구조에 직접 반영한다.
-- API 키를 커밋하지 않는다. `TRIPMATE_DATA_GO_SERVICE_KEY`,
-  `KRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`,
-  `DATA_GO_SERVICE_KEY`는 로컬 환경변수로만 사용한다.
+- API 키를 커밋하지 않는다. data.go.kr 주소의 endpoint에 쓰는 서비스키는
+  `DATA_GO_KR_SERVICE_KEY` 환경변수 하나로만 로컬에서 사용한다.
+- `KRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`,
+  `DATA_GO_SERVICE_KEY`, `TRIPMATE_DATA_GO_SERVICE_KEY` 같은 서비스키 환경변수
+  fallback은 만들지 않는다.
 - API 키를 로그, fixture, 예외 메시지, repr, 문서에 남기지 않는다.
 - 문서에서 파일 위치를 쓸 때는 프로젝트 루트 기준 상대 경로만 쓴다.
   예: `src/krforest/client.py`, `docs/forest-api.md`.
@@ -133,7 +135,7 @@ python -m mypy src/krforest
 live 검증은 명시적으로 키를 넣을 때만 수행한다.
 
 ```powershell
-$env:KRFOREST_SERVICE_KEY = "..."
+$env:DATA_GO_KR_SERVICE_KEY = "..."
 python -m pytest -m live
 ```
 

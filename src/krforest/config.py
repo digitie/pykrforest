@@ -7,13 +7,7 @@ from dataclasses import dataclass
 
 from .exceptions import ForestAuthError
 
-DEFAULT_ENV_NAMES = (
-    "KRFOREST_SERVICE_KEY",
-    "KFS_SERVICE_KEY",
-    "FOREST_SERVICE_KEY",
-    "DATA_GO_SERVICE_KEY",
-    "TRIPMATE_DATA_GO_SERVICE_KEY",
-)
+DEFAULT_ENV_NAME = "DATA_GO_KR_SERVICE_KEY"
 DEFAULT_TIMEOUT = 10.0
 DEFAULT_MAX_RPS = 5.0
 
@@ -34,11 +28,12 @@ class ForestConfig:
         timeout: float | str | None = None,
         max_rps: float | str | None = None,
     ) -> ForestConfig:
-        resolved_key = _normalize_api_key(api_key) or _first_env(DEFAULT_ENV_NAMES)
+        resolved_key = _normalize_api_key(api_key) or _normalize_api_key(
+            os.getenv(DEFAULT_ENV_NAME)
+        )
         if not resolved_key:
-            names = ", ".join(DEFAULT_ENV_NAMES)
             raise ForestAuthError(
-                f"api_key is required. Pass api_key=... or set one of: {names}",
+                f"api_key is required. Pass api_key=... or set {DEFAULT_ENV_NAME}",
                 failure_kind="auth",
             )
         return cls(
@@ -46,15 +41,6 @@ class ForestConfig:
             timeout=_resolve_positive_float(timeout, default=DEFAULT_TIMEOUT, field_name="timeout"),
             max_rps=_resolve_positive_float(max_rps, default=DEFAULT_MAX_RPS, field_name="max_rps"),
         )
-
-
-def _first_env(names: tuple[str, ...]) -> str | None:
-    for name in names:
-        value = _normalize_api_key(os.getenv(name))
-        if value:
-            return value
-    return None
-
 
 def _normalize_api_key(value: str | None) -> str | None:
     if value is None:

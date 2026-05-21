@@ -21,13 +21,9 @@ pip install -e ".[dev]"
 ## Service Key
 
 `ForestClient` follows the `python-krheritage-api` shape: pass `api_key=...` or
-let `ForestConfig.from_env()` load one of the supported environment variables.
+let `ForestConfig.from_env()` load the supported environment variable.
 
-- `KRFOREST_SERVICE_KEY`
-- `KFS_SERVICE_KEY`
-- `FOREST_SERVICE_KEY`
-- `DATA_GO_SERVICE_KEY`
-- `TRIPMATE_DATA_GO_SERVICE_KEY`
+- `DATA_GO_KR_SERVICE_KEY`
 
 ```python
 import asyncio
@@ -179,7 +175,7 @@ streamlit run debug_ui/app.py
 ## Live Tests
 
 ```powershell
-$env:KRFOREST_SERVICE_KEY = "..."
+$env:DATA_GO_KR_SERVICE_KEY = "..."
 pytest -m live
 ```
 

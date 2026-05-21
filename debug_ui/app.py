@@ -27,13 +27,7 @@ from krforest import (  # noqa: E402
 from krforest.debug import DebugRun  # noqa: E402
 from krforest.exceptions import ForestApiError  # noqa: E402
 
-DEFAULT_ENV_NAMES = (
-    "KRFOREST_SERVICE_KEY",
-    "KFS_SERVICE_KEY",
-    "FOREST_SERVICE_KEY",
-    "DATA_GO_SERVICE_KEY",
-    "TRIPMATE_DATA_GO_SERVICE_KEY",
-)
+DEFAULT_ENV_NAME = "DATA_GO_KR_SERVICE_KEY"
 
 
 st.set_page_config(page_title="krforest Debug UI", layout="wide")
@@ -41,11 +35,7 @@ st.title("krforest Debug UI")
 
 
 def service_key_from_env() -> str | None:
-    for name in DEFAULT_ENV_NAMES:
-        value = os.getenv(name)
-        if value:
-            return value
-    return None
+    return os.getenv(DEFAULT_ENV_NAME)
 
 
 def parse_params(value: str) -> dict[str, Any]:

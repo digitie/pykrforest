@@ -12,17 +12,10 @@ LIVE_TIMEOUT = 60
 
 
 def _service_key() -> str:
-    for name in (
-        "KRFOREST_SERVICE_KEY",
-        "KFS_SERVICE_KEY",
-        "FOREST_SERVICE_KEY",
-        "DATA_GO_SERVICE_KEY",
-        "TRIPMATE_DATA_GO_SERVICE_KEY",
-    ):
-        value = os.getenv(name)
-        if value:
-            return value
-    pytest.skip("no Korea public-data service key environment variable is set")
+    value = os.getenv("DATA_GO_KR_SERVICE_KEY")
+    if value:
+        return value
+    pytest.skip("DATA_GO_KR_SERVICE_KEY is not set")
 
 
 async def test_live_legacy_forest_services_returns_items():
