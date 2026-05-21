@@ -1,27 +1,25 @@
 # python-krforest-api
 
-Unofficial async Python client for Korea Forest Service public data focused on
-travel and safety use cases.
+Korea Forest Service 공개 데이터를 여행과 안전 use case 중심으로 다루는 비공식 async Python client다.
 
-The package intentionally excludes broad biology, research, forestry-business,
-and unrelated administrative datasets. It covers:
+이 package는 생물학, 연구, 임업 사업, 관련 없는 행정 dataset을 넓게 감싸지 않는다. 현재 scope는 다음과 같다.
 
-- travel: forest trails, dulle-gil, Baekdu-daegan trails, famous mountains,
-  mountain weather, recreation forest reservation API, national recreation forest
-  standard data, recreation forest details, forest.go.kr SHP spatial datasets
-- safety: wildfire risk/statistics, landslide prediction/history, erosion-control
-  dams, mountain weather, safety file datasets
+- 여행: 숲길, 둘레길, 백두대간 trail, 유명산, 산악기상, 숲나들e 예약 API, 국립자연휴양림 standard data, 휴양림 상세, forest.go.kr SHP 공간 dataset
+- 안전: 산불 위험/통계, 산사태 예측/이력, 사방댐, 산악기상, 안전 file dataset
 
-## Install
+## 문서 언어 정책
+
+이 저장소의 모든 Markdown/RST 문서는 한글로 작성한다. API field, code identifier, 명령어, URL, provider 원문은 필요한 경우 원문을 유지한다.
+
+## 설치
 
 ```bash
 pip install -e ".[dev]"
 ```
 
-## Service Key
+## Service key
 
-`ForestClient` follows the `python-krheritage-api` shape: pass `api_key=...` or
-let `ForestConfig.from_env()` load the supported environment variable.
+`ForestClient`는 `python-krheritage-api`와 비슷한 형태를 따른다. `api_key=...`를 직접 넘기거나 `ForestConfig.from_env()`가 지원 환경 변수를 읽게 한다.
 
 - `DATA_GO_KR_SERVICE_KEY`
 
@@ -41,7 +39,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## API Examples
+## API 예시
 
 ```python
 import asyncio
@@ -53,39 +51,25 @@ async def main() -> None:
     async with ForestClient(api_key="YOUR_DATA_GO_KR_KEY") as client:
         trails = await client.travel.forest_services(num_of_rows=5)
         baekdu = await client.travel.baekdu_trails(num_of_rows=5)
-
         reservations = await client.travel.recreation_forest_reservations(
             goods_name="숲속의집",
             start_stay_date="20240228",
             end_stay_date="20240228",
             num_of_rows=5,
         )
-
         standard_forests = await client.travel.standard_recreation_forests(
             sido_name="강원특별자치도",
             accommodation_available=True,
             num_of_rows=5,
         )
-
-        try:
-            fires = await client.safety.wildfire_stats(
-                search_start_date="20240101",
-                search_end_date="20241231",
-                num_of_rows=5,
-            )
-        except Exception as exc:
-            print(exc)
-
         print(trails.total_count, baekdu.total_count, len(reservations.items))
-        print(standard_forests.context.request_params)  # service key is removed
+        print(standard_forests.context.request_params)  # service key는 제거된다.
 
 
 asyncio.run(main())
 ```
 
-Every paged API response is a `Page` with typed items or raw item mappings and a
-safe call context. Coordinate- and address-bearing models use
-`kraddr.base.Address` and `kraddr.base.PlaceCoordinate` directly.
+Paged API 응답은 typed item 또는 raw item mapping을 담은 `Page`와 안전한 call context를 반환한다. 좌표와 주소가 있는 model은 `kraddr.base.Address`와 `kraddr.base.PlaceCoordinate`를 직접 사용한다.
 
 ```python
 from kraddr.base import Address, PlaceCoordinate
@@ -93,7 +77,6 @@ from kraddr.base import Address, PlaceCoordinate
 weather = await client.travel.mountain_weather(num_of_rows=1)
 point: PlaceCoordinate | None = weather.items[0].coordinate
 
-dams = await client.safety.erosion_control_dams(num_of_rows=1)
 forests = await client.travel.recreation_forests(name="덕유산")
 address: Address | None = forests[0].address
 coordinate: PlaceCoordinate | None = forests[0].coordinate
@@ -106,10 +89,9 @@ dulle_features = await client.travel.dulle_trail_features()
 landslide_files = await client.safety.landslide_risk_map_files()
 ```
 
-## File Datasets
+## File dataset
 
-The file-data namespace exposes a curated catalog and can discover direct
-download URLs from data.go.kr detail pages.
+File-data namespace는 curated catalog를 제공하고 data.go.kr detail page에서 직접 download URL을 찾을 수 있다.
 
 ```python
 async with ForestClient.from_env() as client:
@@ -120,27 +102,13 @@ async with ForestClient.from_env() as client:
     sample = await client.files.download("15112801", max_bytes=2048)
 ```
 
-`15112801` is the national recreation forest “숲나들e 숲길 100대명산” file data.
-`client.travel.recreation_forests()` combines the national recreation forest
-promotion, facility, reservation policy, and reservation file datasets into
-high-level detail records with `kraddr.base.Address` and
-`kraddr.base.PlaceCoordinate`.
+`15112801`은 국립자연휴양림 “숲나들e 숲길 100대명산” file data다. `client.travel.recreation_forests()`는 국립자연휴양림 promotion, facility, reservation policy, reservation file dataset을 합쳐 `Address`와 `PlaceCoordinate`가 있는 상세 record로 제공한다.
 
-The forest.go.kr entries `PBD0000041`, `PBD0000031`, `PBD0000221`,
-`PBD0000220`, `PBD0000077`, `PBD0000180`, and `PBD0000210` are direct ZIP
-downloads. `await client.files.download(...)` opens the download popup flow and
-submits the required purpose as personal-data use (`dnldPrps=3`) before fetching
-the ZIP. Point SHP files are exposed as `ForestSpatialPoint`, vector trail files
-as `ForestSpatialFeature`, and the landslide-risk-map archive as a
-filename-keyed `dict[str, bytes]`.
+forest.go.kr의 `PBD0000041`, `PBD0000031`, `PBD0000221`, `PBD0000220`, `PBD0000077`, `PBD0000180`, `PBD0000210` entry는 직접 ZIP download다. `await client.files.download(...)`는 download popup 흐름을 열고 필요한 목적값(`dnldPrps=3`)을 제출한 뒤 ZIP을 가져온다.
 
-## Debug Fixtures
+## Debug fixture
 
-The library includes Streamlit-free primitives that a separate debug UI can use
-to create replay fixtures. `await ForestClient.debug_endpoint()` returns a
-`DebugRun` with input, request, response, parsed result, processed result, trace,
-and error sections. The run also contains `catalog`, a human-readable catalog
-entry whose `dataset_name` and `display_name` are dataset titles.
+Library는 별도 debug UI가 replay fixture를 만들 수 있도록 Streamlit-free primitive를 제공한다. `await ForestClient.debug_endpoint()`는 input, request, response, parsed result, processed result, trace, error, catalog를 담은 `DebugRun`을 반환한다.
 
 ```python
 from krforest import ForestClient, save_fixture
@@ -165,27 +133,22 @@ save_fixture(
 )
 ```
 
-Run the bundled development debug UI with Streamlit:
+Streamlit debug UI 실행:
 
 ```bash
 pip install -e ".[debug-ui]"
 streamlit run debug_ui/app.py
 ```
 
-## Live Tests
+## Live test
 
 ```powershell
 $env:DATA_GO_KR_SERVICE_KEY = "..."
 pytest -m live
 ```
 
-`api.forest.go.kr` trail endpoints are expected to pass with a data.go.kr key.
-Some `apis.data.go.kr/1400000` safety APIs may return HTTP 403 unless the key
-has service-specific approval; live tests report that as an expected
-authorization xfail instead of hiding it.
+`api.forest.go.kr` trail endpoint는 data.go.kr key로 통과하는 것이 기대된다. 일부 `apis.data.go.kr/1400000` safety API는 service-specific approval이 없으면 HTTP 403을 반환할 수 있으며, live test는 이를 authorization xfail로 보고한다.
 
-## References
+## Reference
 
-The curated scope was checked against public data.go.kr and forest.go.kr pages,
-including `https://www.data.go.kr/data/15084696/openapi.do` and the
-forest.go.kr public-data download lists for travel and safety tabs.
+Curated scope는 data.go.kr와 forest.go.kr 공개 페이지를 기준으로 확인했다. 예시는 `https://www.data.go.kr/data/15084696/openapi.do`와 forest.go.kr public-data download list다.
