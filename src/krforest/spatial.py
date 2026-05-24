@@ -264,13 +264,6 @@ def _open_readers_from_archive(
     return tuple(readers)
 
 
-def _member_by_suffix(names: list[str], suffix: str) -> str | None:
-    for name in names:
-        if name.lower().endswith(suffix):
-            return name
-    return None
-
-
 def _clean_record(record: Mapping[str, Any]) -> dict[str, Any]:
     clean: dict[str, Any] = {}
     for key, value in record.items():

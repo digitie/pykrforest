@@ -42,6 +42,7 @@ class ForestConfig:
             max_rps=_resolve_positive_float(max_rps, default=DEFAULT_MAX_RPS, field_name="max_rps"),
         )
 
+
 def _normalize_api_key(value: str | None) -> str | None:
     if value is None:
         return None

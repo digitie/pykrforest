@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
@@ -321,12 +322,15 @@ class ForestClient:
                     failure_kind="parse",
                     response=row,
                 ) from exc
+        requested_page_no = int(params["pageNo"]) if params and "pageNo" in params else 1
+        requested_num_of_rows = (
+            int(params["numOfRows"]) if params and "numOfRows" in params else max(len(parsed), 10)
+        )
         return Page(
             items=tuple(parsed),
-            total_count=payload.total_count or len(parsed),
-            page_no=payload.page_no or int(params.get("pageNo", 1) if params else 1),
-            num_of_rows=payload.num_of_rows
-            or int(params.get("numOfRows", len(parsed)) if params else 10),
+            total_count=payload.total_count if payload.total_count is not None else len(parsed),
+            page_no=payload.page_no or requested_page_no,
+            num_of_rows=payload.num_of_rows or requested_num_of_rows,
             raw=payload.raw,
             header=payload.header,
             context=payload.context,
@@ -452,7 +456,6 @@ class TravelNamespace:
             api_endpoint("national_recreation_forest_reservations"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
             parse_recreation_forest_reservation,
-            response_format="xml",
         )
 
     async def standard_recreation_forests(
@@ -879,13 +882,17 @@ async def _forest_go_request_with_retry(
     *,
     dataset: FileDataset,
     endpoint: str,
+    attempts: int = 3,
+    backoff: float = 0.5,
 ) -> ResponseLike:
     last_exc: Exception | None = None
-    for _ in range(3):
+    for attempt in range(attempts):
         try:
             return await request()
         except Exception as exc:  # pragma: no cover - network-dependent
             last_exc = exc
+            if attempt + 1 < attempts:
+                await asyncio.sleep(backoff * (2**attempt))
     raise ForestRequestError(
         f"forest.go.kr request failed: {last_exc}",
         provider=dataset.provider,
