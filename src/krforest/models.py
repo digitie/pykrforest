@@ -25,7 +25,7 @@ class ForestModel(BaseModel):
 class CallContext(ForestModel):
     """응답을 만든 원격 호출의 메타데이터."""
 
-    provider: Provider | str | None = None
+    provider: str | None = None
     endpoint: str | None = None
     request_url: str | None = None
     request_params: RawRecord = Field(default_factory=dict)
@@ -105,7 +105,7 @@ class CatalogEntry(ForestModel):
     dataset_id: str
     dataset_name: str
     categories: tuple[Category, ...]
-    provider: Provider | str
+    provider: str
     description: str
     detail_url: str
     service_key_url: str | None = None

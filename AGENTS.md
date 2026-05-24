@@ -1,20 +1,27 @@
-## 문서 언어 정책
-
-이 저장소의 모든 Markdown/RST 문서는 한글로 작성합니다. 공식 API 필드명, 코드 식별자, 명령어, URL, provider 원문처럼 그대로 보존해야 하는 값만 영어를 유지합니다. 새 문서나 기존 문서를 수정할 때도 이 규칙을 우선합니다.
-
 # AGENTS.md
 
-이 문서는 `python-krforest-api`에서 에이전트가 작업할 때의 진입점(Entrypoint)입니다.
+이 문서는 `python-krforest-api`에서 에이전트가 작업할 때의 진입점(Entrypoint)이다.
 
-이 프로젝트는 유지보수성과 작업 일관성을 위해 구체적인 상세 규칙과 도메인 어휘를 `SKILL.md`에 보관합니다. 작업 전에 **반드시** 다음 문서들을 순서대로 읽으십시오.
+## 문서 언어 정책
 
-## 읽어야 할 문서 목록
+이 저장소의 모든 Markdown/RST 문서는 한글로 작성한다. 공식 API 필드명, 코드 식별자, 명령어, URL, provider 원문처럼 그대로 보존해야 하는 값만 영어를 유지한다.
 
-1. `SKILL.md` — 절대 규칙(DO NOT), 구현 정책, 테스트 기준, 빈번한 문제 해결 방법
+## 읽어야 할 문서 (순서대로)
+
+1. `SKILL.md` — 정체성, 빠른 시작, 절대 규칙(DO NOT), 책임 모듈 경계, 작업 후 체크리스트
 2. `docs/resume.md` — 현재 진척도와 이어서 해야 할 "다음 작업"
-3. `docs/tasks.md` — 프로젝트 백로그
-4. `docs/decisions.md` — 프로젝트 기술 및 정책 의사결정(ADR)
-5. `docs/journal.md` — 작업 변경 이력
+3. `docs/tasks.md` — 프로젝트 백로그(TODO/DONE)
+4. `docs/decisions.md` — ADR 표준 형식과 누적 의사결정
+5. `docs/journal.md` — 작업 변경 이력(역시간순)
 6. `README.md` — 사용자 가이드 및 패키지 개요
 
-이 프로젝트의 세부적인 개발 우선순위 및 제약 사항은 `SKILL.md`를 최우선으로 따릅니다.
+## 우선순위
+
+1. 사용자 요청
+2. `AGENTS.md` 및 `SKILL.md`의 절대 규칙
+3. `docs/decisions.md`의 ADR
+4. `docs/forest-api.md`, `README.md` 등 도메인 문서
+5. 기존 코드와 테스트 패턴
+6. 최소 범위의 되돌리기 쉬운 변경
+
+세부 개발 규칙은 `SKILL.md`를 최우선으로 따른다.
