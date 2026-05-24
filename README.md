@@ -149,6 +149,16 @@ pytest -m live
 
 `api.forest.go.kr` trail endpoint는 data.go.kr key로 통과하는 것이 기대된다. 일부 `apis.data.go.kr/1400000` safety API는 service-specific approval이 없으면 HTTP 403을 반환할 수 있으며, live test는 이를 authorization xfail로 보고한다.
 
+## 문서 지도
+
+- [`SKILL.md`](SKILL.md) — 에이전트 작업 가이드라인 (절대 규칙, 구현 원칙, 로컬 환경 이슈 해결)
+- [`AGENTS.md`](AGENTS.md) — 에이전트 문서 진입점(Entrypoint)
+- [`docs/resume.md`](docs/resume.md) — 현재 진척도와 이어서 해야 할 "다음 작업"
+- [`docs/tasks.md`](docs/tasks.md) — 프로젝트 백로그
+- [`docs/decisions.md`](docs/decisions.md) — 프로젝트 기술 및 정책 의사결정(ADR)
+- [`docs/journal.md`](docs/journal.md) — 작업 일지
+
 ## Reference
 
 Curated scope는 data.go.kr와 forest.go.kr 공개 페이지를 기준으로 확인했다. 예시는 `https://www.data.go.kr/data/15084696/openapi.do`와 forest.go.kr public-data download list다.
+
