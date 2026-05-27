@@ -6,6 +6,45 @@ from collections.abc import Mapping
 from typing import Any
 from xml.etree import ElementTree
 
+_LATITUDE_KEYS: tuple[str, ...] = (
+    "latitude",
+    "lat",
+    "yValue",
+    "y_value",
+    "Y",
+    "y",
+    "POINT_Y",
+    "위도",
+    "Latitude",
+)
+_LONGITUDE_KEYS: tuple[str, ...] = (
+    "longitude",
+    "lon",
+    "lng",
+    "xValue",
+    "x_value",
+    "X",
+    "x",
+    "POINT_X",
+    "경도",
+    "Longitude",
+)
+_ADDRESS_KEYS: tuple[str, ...] = (
+    "address",
+    "rdnmadr",
+    "lnmadr",
+    "주소",
+    "소재지도로명주소",
+    "소재지지번주소",
+    "소재지주소",
+    "기본주소",
+    "주소지",
+    "POFLC_NM",
+    "DTADD",
+)
+# 산림청·data.go.kr이 결측을 나타내는 sentinel 좌표값. 정확히 비교해도 안전한 값만 둔다.
+_MISSING_COORDINATE_VALUES: frozenset[float] = frozenset({-99.0, -999.0, 0.0})
+
 
 def strip_or_none(value: Any) -> str | None:
     if value is None:
@@ -114,3 +153,59 @@ def public_params(params: Mapping[str, Any]) -> dict[str, Any]:
         for key, value in without_none(params).items()
         if str(key).replace("_", "").lower() not in {"servicekey", "key", "certkey"}
     }
+
+
+def extract_coordinate(
+    row: Mapping[str, Any],
+    *,
+    extra_latitude_keys: tuple[str, ...] = (),
+    extra_longitude_keys: tuple[str, ...] = (),
+) -> tuple[float | None, float | None]:
+    """row에서 (latitude, longitude)를 추출한다. 결측 sentinel(-99, -999, 0)은 None."""
+
+    lat = _first_float(row, (*_LATITUDE_KEYS, *extra_latitude_keys))
+    lon = _first_float(row, (*_LONGITUDE_KEYS, *extra_longitude_keys))
+    if lat is None or lon is None:
+        return None, None
+    if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+        return None, None
+    if lat in _MISSING_COORDINATE_VALUES or lon in _MISSING_COORDINATE_VALUES:
+        return None, None
+    return lat, lon
+
+
+def extract_address(
+    row: Mapping[str, Any],
+    *,
+    extra_keys: tuple[str, ...] = (),
+) -> str | None:
+    """row에서 도로명/지번 주소 문자열을 우선 키 순서대로 찾아 반환한다."""
+
+    for key in (*_ADDRESS_KEYS, *extra_keys):
+        value = _lookup_text(row, key)
+        if value is not None:
+            return value
+    return None
+
+
+def _first_float(row: Mapping[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = to_float_or_none(_lookup_raw(row, key))
+        if value is not None:
+            return value
+    return None
+
+
+def _lookup_text(row: Mapping[str, Any], key: str) -> str | None:
+    value = strip_or_none(_lookup_raw(row, key))
+    return value
+
+
+def _lookup_raw(row: Mapping[str, Any], key: str) -> Any:
+    if key in row:
+        return row[key]
+    target = key.lower()
+    for candidate_key in row:
+        if str(candidate_key).lower() == target:
+            return row[candidate_key]
+    return None

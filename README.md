@@ -69,17 +69,17 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Paged API 응답은 typed item 또는 raw item mapping을 담은 `Page`와 안전한 call context를 반환한다. 좌표와 주소가 있는 model은 `kraddr.base.Address`와 `kraddr.base.PlaceCoordinate`를 직접 사용한다.
+Paged API 응답은 typed item 또는 raw item mapping을 담은 `Page`와 안전한 call context를 반환한다. 좌표·주소가 있는 모델은 외부 의존 없이 `latitude: float | None`, `longitude: float | None`, `address: str | None`을 직접 노출한다.
 
 ```python
-from kraddr.base import Address, PlaceCoordinate
-
 weather = await client.travel.mountain_weather(num_of_rows=1)
-point: PlaceCoordinate | None = weather.items[0].coordinate
+lat: float | None = weather.items[0].latitude
+lon: float | None = weather.items[0].longitude
 
 forests = await client.travel.recreation_forests(name="덕유산")
-address: Address | None = forests[0].address
-coordinate: PlaceCoordinate | None = forests[0].coordinate
+address: str | None = forests[0].address
+forest_lat: float | None = forests[0].latitude
+forest_lon: float | None = forests[0].longitude
 
 kid_forests = await client.travel.kid_forest_centers()
 education_centers = await client.travel.forest_education_centers()
@@ -102,7 +102,7 @@ async with ForestClient.from_env() as client:
     sample = await client.files.download("15112801", max_bytes=2048)
 ```
 
-`15112801`은 국립자연휴양림 “숲나들e 숲길 100대명산” file data다. `client.travel.recreation_forests()`는 국립자연휴양림 promotion, facility, reservation policy, reservation file dataset을 합쳐 `Address`와 `PlaceCoordinate`가 있는 상세 record로 제공한다.
+`15112801`은 국립자연휴양림 "숲나들e 숲길 100대명산" file data다. `client.travel.recreation_forests()`는 국립자연휴양림 promotion, facility, reservation policy, reservation file dataset을 합쳐 `address`, `latitude`, `longitude`가 채워진 상세 record로 제공한다.
 
 forest.go.kr의 `PBD0000041`, `PBD0000031`, `PBD0000221`, `PBD0000220`, `PBD0000077`, `PBD0000180`, `PBD0000210` entry는 직접 ZIP download다. `await client.files.download(...)`는 download popup 흐름을 열고 필요한 목적값(`dnldPrps=3`)을 제출한 뒤 ZIP을 가져온다.
 

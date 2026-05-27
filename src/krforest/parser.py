@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from kraddr.base import Address, PlaceCoordinate
-
+from ._convert import extract_address, extract_coordinate
 from .models import (
     ErosionControlDam,
     MountainWeather,
@@ -40,19 +39,15 @@ _STATUS_KEYS = ("status", "상태", "예약상태")
 def parse_mountain_weather(row: dict[str, Any]) -> MountainWeather:
     """산악기상 원본 레코드를 좌표 포함 모델로 파싱한다."""
 
-    return MountainWeather(
-        coordinate=PlaceCoordinate.from_mapping(row),
-        raw=row,
-    )
+    latitude, longitude = extract_coordinate(row)
+    return MountainWeather(latitude=latitude, longitude=longitude, raw=row)
 
 
 def parse_erosion_control_dam(row: dict[str, Any]) -> ErosionControlDam:
     """사방댐 원본 레코드를 좌표 포함 모델로 파싱한다."""
 
-    return ErosionControlDam(
-        coordinate=PlaceCoordinate.from_mapping(row),
-        raw=row,
-    )
+    latitude, longitude = extract_coordinate(row)
+    return ErosionControlDam(latitude=latitude, longitude=longitude, raw=row)
 
 
 def parse_recreation_forest_reservation(row: dict[str, Any]) -> RecreationForestReservation:
@@ -71,10 +66,8 @@ def parse_recreation_forest_reservation(row: dict[str, Any]) -> RecreationForest
 def parse_standard_recreation_forest(row: dict[str, Any]) -> StandardRecreationForest:
     """전국휴양림표준데이터 레코드를 주소와 좌표 포함 모델로 파싱한다."""
 
-    address = Address.from_mapping(row)
-    if address is None:
-        address_text = first_text(row, "rdnmadr", "lnmadr", "소재지도로명주소", "소재지지번주소")
-        address = Address.from_text(address_text) if address_text is not None else None
+    latitude, longitude = extract_coordinate(row)
+    address = extract_address(row, extra_keys=("소재지도로명주소", "소재지지번주소"))
 
     return StandardRecreationForest(
         name=first_text(row, "rcrfrstNm", "휴양림명"),
@@ -89,7 +82,8 @@ def parse_standard_recreation_forest(row: dict[str, Any]) -> StandardRecreationF
         management_agency=first_text(row, "institutionNm", "관리기관명"),
         phone_number=first_text(row, "phoneNumber", "관리기관전화번호"),
         homepage_url=first_text(row, "homepageUrl", "홈페이지주소"),
-        coordinate=PlaceCoordinate.from_mapping(row),
+        latitude=latitude,
+        longitude=longitude,
         reference_date=first_text(row, "referenceDate", "데이터기준일자"),
         institution_code=first_text(row, "instt_code", "제공기관코드"),
         raw=row,

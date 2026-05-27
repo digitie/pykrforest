@@ -7,9 +7,7 @@ import io
 from collections.abc import Mapping
 from typing import Any
 
-from kraddr.base import Address, PlaceCoordinate
-
-from ._convert import strip_or_none
+from ._convert import extract_address, extract_coordinate, strip_or_none
 from .exceptions import ForestParseError
 from .models import RecreationForest
 from .parser import first_text, parse_recreation_forest_reservation
@@ -106,31 +104,26 @@ def build_recreation_forests(
         reservations = _lookup_rows(reservation_index, forest_id=forest_id, name=forest_name)
         detail_rows: tuple[Mapping[str, Any], ...] = (base_row, *facilities)
 
-        address = Address.from_mapping(base_row)
-        if address is None:
-            text = first_text(base_row, *_EXTRA_ADDRESS_KEYS)
-            address = Address.from_text(text) if text is not None else None
+        address = extract_address(base_row, extra_keys=_EXTRA_ADDRESS_KEYS)
         if address is None:
             for row in facilities:
-                address = Address.from_mapping(row)
-                if address is None:
-                    text = first_text(row, *_EXTRA_ADDRESS_KEYS)
-                    address = Address.from_text(text) if text is not None else None
+                address = extract_address(row, extra_keys=_EXTRA_ADDRESS_KEYS)
                 if address is not None:
                     break
 
-        coordinate = PlaceCoordinate.from_mapping(base_row)
-        if coordinate is None:
+        latitude, longitude = extract_coordinate(base_row)
+        if latitude is None or longitude is None:
             for row in facilities:
-                coordinate = PlaceCoordinate.from_mapping(row)
-                if coordinate is not None:
+                latitude, longitude = extract_coordinate(row)
+                if latitude is not None and longitude is not None:
                     break
 
         forests.append(
             RecreationForest(
                 institution_id=forest_id,
                 name=forest_name,
-                coordinate=coordinate,
+                latitude=latitude,
+                longitude=longitude,
                 address=address,
                 phone_number=_first_text_from_rows(detail_rows, *_PHONE_KEYS),
                 capacity=_first_text_from_rows(detail_rows, *_CAPACITY_KEYS),

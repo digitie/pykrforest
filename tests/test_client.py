@@ -1,7 +1,6 @@
 ﻿from __future__ import annotations
 
 import pytest
-from kraddr.base import Address, PlaceCoordinate
 
 from krforest import ForestAuthError, Page
 from krforest.exceptions import ForestNoDataError
@@ -168,8 +167,9 @@ async def test_standard_recreation_forests_uses_type_param_and_models(fake_clien
     assert params["stayngPosblYn"] == "Y"
     item = page.items[0]
     assert item.name == "가리산자연휴양림"
-    assert item.coordinate == PlaceCoordinate(lat=37.871, lon=127.956)
-    assert isinstance(item.address, Address)
+    assert item.latitude == 37.871
+    assert item.longitude == 127.956
+    assert item.address == "강원특별자치도 홍천군 두촌면 가리산길 426"
     assert item.raw["instt_code"] == "4250000"
 
 
@@ -208,8 +208,8 @@ async def test_mountain_weather_returns_place_coordinate(fake_client_factory):
 
     page = await client.travel.mountain_weather(num_of_rows=1)
 
-    assert isinstance(page.items[0].coordinate, PlaceCoordinate)
-    assert page.items[0].coordinate == PlaceCoordinate(lat=37.445, lon=126.9636)
+    assert page.items[0].latitude == 37.445
+    assert page.items[0].longitude == 126.9636
     assert page.items[0].raw["stationName"] == "관악산"
 
 
@@ -222,7 +222,8 @@ async def test_mountain_weather_missing_coordinate_is_none(fake_client_factory):
 
     page = await client.travel.mountain_weather(num_of_rows=1)
 
-    assert page.items[0].coordinate is None
+    assert page.items[0].latitude is None
+    assert page.items[0].longitude is None
     assert page.items[0].raw["stationName"] == "관악산"
 
 
@@ -235,7 +236,8 @@ async def test_erosion_control_dams_returns_place_coordinate(fake_client_factory
 
     page = await client.safety.erosion_control_dams(num_of_rows=1)
 
-    assert page.items[0].coordinate == PlaceCoordinate(lat=37.2, lon=127.1)
+    assert page.items[0].latitude == 37.2
+    assert page.items[0].longitude == 127.1
     assert page.items[0].raw["name"] == "테스트사방댐"
 
 
@@ -318,9 +320,9 @@ async def test_recreation_forests_combines_files_with_address_and_coordinate(fak
     forest = forests[0]
     assert forest.institution_id == "FR001"
     assert forest.name == "덕유산자연휴양림"
-    assert forest.coordinate == PlaceCoordinate(lat=35.9, lon=127.8)
-    assert isinstance(forest.address, Address)
-    assert forest.address.display_address == "전북 무주군 무풍면 구천동로 530-62"
+    assert forest.latitude == 35.9
+    assert forest.longitude == 127.8
+    assert forest.address == "전북 무주군 무풍면 구천동로 530-62"
     assert forest.phone_number == "063-322-1097"
     assert forest.homepage_url == "https://www.foresttrip.go.kr"
     assert forest.facilities[0]["상품명"] == "숲속의집"
@@ -447,7 +449,8 @@ async def test_forest_education_centers_parse_shp(fake_client_factory, tmp_path)
     assert records[0].dataset_id == "PBD0000221"
     assert records[0].name == "테스트 유아숲체험원"
     assert records[0].operation_status == "운영"
-    assert isinstance(records[0].coordinate, PlaceCoordinate)
+    assert records[0].latitude is not None
+    assert records[0].longitude is not None
 
 
 async def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
@@ -468,11 +471,11 @@ async def test_kid_forest_centers_parse_shp_with_address_and_coordinate(
     assert record.dataset_id == "PBD0000220"
     assert record.name == "테스트 유아숲체험원"
     assert record.operation_status == "운영"
-    assert isinstance(record.address, Address)
-    assert record.address.display_address == "서울특별시 중구 세종대로 110"
-    assert isinstance(record.coordinate, PlaceCoordinate)
-    assert 126.0 < record.coordinate.lon < 128.0
-    assert 37.0 < record.coordinate.lat < 38.0
+    assert record.address == "서울특별시 중구 세종대로 110"
+    assert record.latitude is not None
+    assert record.longitude is not None
+    assert 126.0 < record.longitude < 128.0
+    assert 37.0 < record.latitude < 38.0
 
 
 async def test_dulle_trail_features_parse_line_shp(fake_client_factory, tmp_path):
@@ -492,9 +495,10 @@ async def test_dulle_trail_features_parse_line_shp(fake_client_factory, tmp_path
     assert feature.geometry_type == "LineString"
     assert feature.geometry is not None
     assert feature.bbox is not None
-    assert isinstance(feature.coordinate, PlaceCoordinate)
-    assert 126.0 < feature.coordinate.lon < 128.0
-    assert 37.0 < feature.coordinate.lat < 38.0
+    assert feature.latitude is not None
+    assert feature.longitude is not None
+    assert 126.0 < feature.longitude < 128.0
+    assert 37.0 < feature.latitude < 38.0
 
 
 async def test_file_download_url_missing_content_url_raises(fake_client_factory):

@@ -111,7 +111,8 @@ async def test_live_forest_education_centers_download_and_parse():
 
     assert records
     assert records[0].dataset_id == "PBD0000221"
-    assert records[0].coordinate is not None
+    assert records[0].latitude is not None
+    assert records[0].longitude is not None
 
 
 async def test_live_landslide_risk_map_archive_downloads_files():

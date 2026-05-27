@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from kraddr.base import Address, PlaceCoordinate
-
 from .catalog import (
     API_ENDPOINTS,
     DATA_GO_API_ACCOUNT_URL,
@@ -43,13 +41,12 @@ from .models import (
     StandardRecreationForest,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 PROVIDER_NAME = "python-krforest-api"
 
 __all__ = [
     "API_ENDPOINTS",
     "PROVIDER_NAME",
-    "Address",
     "DATA_GO_API_ACCOUNT_URL",
     "FILE_DATASETS",
     "ApiEndpoint",
@@ -71,7 +68,6 @@ __all__ = [
     "ForestServerError",
     "MountainWeather",
     "Page",
-    "PlaceCoordinate",
     "RawRecord",
     "RecreationForest",
     "RecreationForestReservation",
