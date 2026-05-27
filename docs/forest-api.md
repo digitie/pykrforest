@@ -53,13 +53,13 @@ Notes:
   the data.go.kr login/application flow.
 - `client.travel.recreation_forests()` combines the national recreation forest
   promotion, facility, reservation policy, and reservation file datasets into a
-  high-level detail record with `kraddr.base.Address` and
-  `kraddr.base.PlaceCoordinate`.
+  high-level detail record with plain `address`, `latitude`, and `longitude`
+  fields.
 - `client.travel.kid_forest_centers()` and
   `client.travel.recreation_forest_arboretums()` download forest.go.kr SHP ZIP
   files, submit the popup purpose as `개인자료용` (`dnldPrps=3`), and return
-  `ForestSpatialPoint` records with `kraddr.base.Address` and transformed WGS84
-  `kraddr.base.PlaceCoordinate`.
+  `ForestSpatialPoint` records with `address`, plus transformed WGS84
+  `latitude` and `longitude` floats.
 - `client.travel.forest_education_centers()` and
   `client.travel.traditional_village_forests()` apply the same forest.go.kr
   download flow and return `ForestSpatialPoint` records.

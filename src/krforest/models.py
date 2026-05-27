@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Generic, Literal, TypeAlias, TypeVar
 
-from kraddr.base import Address, PlaceCoordinate
 from pydantic import BaseModel, ConfigDict, Field
 
 RawRecord: TypeAlias = Mapping[str, Any]
@@ -122,14 +121,16 @@ class CatalogEntry(ForestModel):
 class MountainWeather(ForestModel):
     """산악기상 관측 지점과 기상 원본 레코드."""
 
-    coordinate: PlaceCoordinate | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     raw: RawRecord = Field(repr=False)
 
 
 class ErosionControlDam(ForestModel):
     """사방댐 원본 레코드."""
 
-    coordinate: PlaceCoordinate | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     raw: RawRecord = Field(repr=False)
 
 
@@ -155,11 +156,12 @@ class StandardRecreationForest(ForestModel):
     entrance_fee: str | None = None
     accommodation_available: str | None = None
     main_facilities: str | None = None
-    address: Address | None = None
+    address: str | None = None
     management_agency: str | None = None
     phone_number: str | None = None
     homepage_url: str | None = None
-    coordinate: PlaceCoordinate | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     reference_date: str | None = None
     institution_code: str | None = None
     raw: RawRecord = Field(repr=False)
@@ -172,10 +174,11 @@ class ForestSpatialPoint(ForestModel):
     dataset_name: str
     name: str | None = None
     category: str | None = None
-    address: Address | None = None
+    address: str | None = None
     phone_number: str | None = None
     homepage_url: str | None = None
-    coordinate: PlaceCoordinate | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     projected_x: float | None = None
     projected_y: float | None = None
     year: str | None = None
@@ -197,7 +200,8 @@ class ForestSpatialFeature(ForestModel):
     geometry_type: str | None = None
     geometry: RawRecord | None = Field(default=None, repr=False)
     bbox: tuple[float, float, float, float] | None = None
-    coordinate: PlaceCoordinate | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     raw: RawRecord = Field(repr=False)
 
 
@@ -206,8 +210,9 @@ class RecreationForest(ForestModel):
 
     institution_id: str | None = None
     name: str | None = None
-    coordinate: PlaceCoordinate | None = None
-    address: Address | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    address: str | None = None
     phone_number: str | None = None
     capacity: str | None = None
     operation_time: str | None = None

@@ -12,7 +12,7 @@ description: 산림청 및 data.go.kr 산림 관련 여행/안전 비공식 Pyth
 
 이 저장소(GitHub 이름 `python-krforest-api`, Python 패키지 `krforest`)는 산림청과 `data.go.kr`이 공개하는 **여행·안전 관련 산림 데이터**만 다루는 비공식 async Python 클라이언트다. 생물 표본, 임업경제, 법령해석, 사업자 등록, 행정 통계 데이터는 의도적으로 범위에서 제외한다.
 
-응답 모델은 `python-kraddr-base`의 `Address`, `PlaceCoordinate`를 직접 사용하며, 이 패키지는 **얇은 래퍼(thin wrapper)를 만들지 않는다**. `pykma`, `pyopinet`, `pykex`처럼 같은 계열의 검증된 라이브러리 구조와 동작을 가져와 맞춘다.
+응답 모델은 외부 도메인 패키지 의존 없이 **`latitude: float | None`, `longitude: float | None`, `address: str | None`** 같은 원시 타입만 노출한다. 이 패키지는 **얇은 래퍼(thin wrapper)를 만들지 않는다**. `pykma`, `pyopinet`, `pykex`처럼 같은 계열의 검증된 라이브러리 구조와 동작을 가져와 맞춘다.
 
 ### 식별자 매핑
 
@@ -22,7 +22,7 @@ description: 산림청 및 data.go.kr 산림 관련 여행/안전 비공식 Pyth
 | Python import | `from krforest import ForestClient` |
 | 환경변수 키 | `DATA_GO_KR_SERVICE_KEY` (유일) |
 | 데이터 제공처 | `data.go.kr`, `forest.go.kr` |
-| 의존 라이브러리 | `python-kraddr-base`, `httpx`, `pydantic`, `pyproj`, `pyshp` |
+| 의존 라이브러리 | `httpx`, `pydantic`, `pyproj`, `pyshp` |
 
 ## 2. 빠른 시작
 
@@ -80,11 +80,11 @@ docs/
 3. **API 키 평문 노출 금지**: 로그, 픽스처, 예외 메시지, repr, `request_params`, `mask_params` 결과 어디에도 키가 남아서는 안 된다. `_convert.mask_params` / `public_params` / `redact_secret`을 거치지 않은 채 query를 출력하지 않는다.
 4. **응답 body 확인 누락 금지**: HTTP 200이어도 body-level `resultCode`/`returnReasonCode`를 반드시 확인해야 한다. 정상 코드는 `""`, `"00"`, `"0000"`, `"NORMAL_CODE"`만 허용한다. `"03"`(no data)은 빈 `Page`로 정상 처리한다.
 5. **절대 경로 사용 금지**: 문서에서 파일 위치를 쓸 때는 프로젝트 루트 기준 상대 경로만 쓴다.
-6. **`_kraddr_base`/`Address`/`PlaceCoordinate` 재정의 금지**: 좌표·주소 객체는 `python-kraddr-base`의 것을 그대로 import한다. 호환 클래스를 새로 만들지 않는다.
+6. **외부 도메인 패키지 의존 금지**: 좌표·주소를 위해 `python-kraddr-base` 같은 외부 도메인 패키지를 다시 도입하지 않는다. 좌표는 `latitude: float | None`, `longitude: float | None`, 주소는 `address: str | None`로 평탄하게 노출한다.
 7. **동기 인터페이스 추가 금지**: `ForestClient`는 async-only다. 동기가 필요하면 호출자가 `asyncio.run`으로 감싼다.
 8. **`response.json()` 결과를 dict로 단정 금지**: `_decode_payload`는 root가 dict인지 검증하고, 아니면 `ForestParseError`를 던진다. 새 endpoint에서도 같은 검증 경로를 유지한다.
 9. **파일데이터 다운로드 URL 하드코드 회피**: data.go.kr 파일데이터는 상세 페이지의 JSON-LD `contentUrl`을 우선 사용한다. forest.go.kr 파일데이터는 popup → history → ZIP 흐름을 따른다(개인 사용 목적 코드 `dnldPrps=3`).
-10. **공간 좌표 순서 혼동 금지**: 외부 인터페이스는 `(lon, lat)`. `PlaceCoordinate(lat=..., lon=...)`로 만들고, GeoJSON `coordinates`는 `[lon, lat]`을 유지한다. SHP의 EPSG:5179 등 투영좌표는 `_coordinate_transformer`로 WGS84로 변환한 뒤 노출한다.
+10. **공간 좌표 순서 혼동 금지**: 모델에는 `latitude`, `longitude` 두 필드로 따로 노출한다. GeoJSON `coordinates`는 표준대로 `[lon, lat]`을 유지한다. SHP의 EPSG:5179 등 투영좌표는 `_coordinate_transformer`로 WGS84로 변환한 뒤 노출한다.
 11. **상위 모듈 import 역행 금지**: 위 디렉토리 지도의 의존 방향을 거꾸로 import하지 않는다. (예: `models.py`가 `client.py`를 import하면 안 됨)
 12. **레코드 단위 책임 혼동 금지**: 단일 row → 모델 변환은 `parser.py`. 여러 파일·여러 row를 join해 단일 객체로 만드는 것은 `processor.py`. SHP/GeoJSON 등 공간 파일은 `spatial.py`. 새 변환을 추가할 때 이 경계를 지키고, `parser.py`에 join 로직을 두지 않는다.
 
@@ -96,7 +96,7 @@ docs/
 | 새 파일데이터 추가 | `catalog.py`에 `FileDataset` 추가 → 필요시 `processor.py`/`spatial.py`에 변환 |
 | 새 예외 타입 추가 | `exceptions.py`에 `ForestApiError` 하위 클래스 추가, `failure_kind` 부여 |
 | 응답 envelope 차이 처리 | `_http.py`의 `_normalize_payload` / `_raise_result_code` |
-| 응답에 좌표·주소 노출 | `PlaceCoordinate.from_mapping(row)`, `Address.from_mapping(row)` 우선, 실패 시 `Address.from_text` 폴백 |
+| 응답에 좌표·주소 노출 | `_convert.extract_coordinate(row)`, `_convert.extract_address(row)` 헬퍼 사용. 모델은 `latitude`/`longitude`/`address` 평탄 필드 |
 | 디버그 fixture 저장 | `await client.debug_endpoint(...)` → `save_fixture(...)` |
 | replay 테스트 추가 | `tests/test_replay.py`, `tests/test_generated_fixtures.py` 참조 |
 | 한도 안전한 동시 호출 | `_ratelimit.AsyncTokenBucket` (기본 5 RPS) |

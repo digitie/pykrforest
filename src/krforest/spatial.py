@@ -10,9 +10,7 @@ import zipfile
 from collections.abc import Iterator, Mapping
 from typing import Any
 
-from kraddr.base import Address, PlaceCoordinate
-
-from ._convert import strip_or_none, to_float_or_none
+from ._convert import extract_address, strip_or_none, to_float_or_none
 from .exceptions import ForestParseError
 from .models import FileDataset, ForestSpatialFeature, ForestSpatialPoint
 from .parser import first_text
@@ -68,11 +66,9 @@ def forest_spatial_points(
             continue
 
         projected_x, projected_y = _record_point(raw, shape_record.shape)
-        address = Address.from_mapping(raw)
-        if address is None:
-            address_text = first_text(raw, *_ADDRESS_KEYS)
-            address = Address.from_text(address_text) if address_text is not None else None
+        address = extract_address(raw, extra_keys=_ADDRESS_KEYS)
 
+        latitude, longitude = _wgs84_point(projected_x, projected_y, transformer)
         points.append(
             ForestSpatialPoint(
                 dataset_id=dataset.data_go_id,
@@ -82,7 +78,8 @@ def forest_spatial_points(
                 address=address,
                 phone_number=first_text(raw, *_PHONE_KEYS),
                 homepage_url=first_text(raw, *_HOMEPAGE_KEYS),
-                coordinate=_place_coordinate(projected_x, projected_y, transformer),
+                latitude=latitude,
+                longitude=longitude,
                 projected_x=projected_x,
                 projected_y=projected_y,
                 year=first_text(raw, *_YEAR_KEYS),
@@ -118,6 +115,7 @@ def forest_spatial_features(
                 continue
 
             geometry = _shape_geometry(shape_record.shape, transformer)
+            latitude, longitude = _shape_centroid(shape_record.shape, transformer)
             features.append(
                 ForestSpatialFeature(
                     dataset_id=dataset.data_go_id,
@@ -128,7 +126,8 @@ def forest_spatial_features(
                     geometry_type=_geometry_type(geometry),
                     geometry=geometry,
                     bbox=_shape_bbox(shape_record.shape, transformer),
-                    coordinate=_shape_centroid(shape_record.shape, transformer),
+                    latitude=latitude,
+                    longitude=longitude,
                     raw=raw,
                 )
             )
@@ -142,6 +141,7 @@ def forest_spatial_features(
             geometry = feature.get("geometry")
             if not isinstance(geometry, Mapping):
                 geometry = None
+            latitude, longitude = _geometry_centroid(geometry)
             features.append(
                 ForestSpatialFeature(
                     dataset_id=dataset.data_go_id,
@@ -152,7 +152,8 @@ def forest_spatial_features(
                     geometry_type=_geometry_type(geometry),
                     geometry=dict(geometry) if geometry is not None else None,
                     bbox=_geometry_bbox(geometry),
-                    coordinate=_geometry_centroid(geometry),
+                    latitude=latitude,
+                    longitude=longitude,
                     raw=raw,
                 )
             )
@@ -165,6 +166,7 @@ def forest_spatial_features(
         geometry = feature.get("geometry")
         if not isinstance(geometry, Mapping):
             geometry = None
+        latitude, longitude = _geometry_centroid(geometry)
         features.append(
             ForestSpatialFeature(
                 dataset_id=dataset.data_go_id,
@@ -175,7 +177,8 @@ def forest_spatial_features(
                 geometry_type=_geometry_type(geometry),
                 geometry=dict(geometry) if geometry is not None else None,
                 bbox=_geometry_bbox(geometry),
-                coordinate=_geometry_centroid(geometry),
+                latitude=latitude,
+                longitude=longitude,
                 raw=raw,
             )
         )
@@ -310,17 +313,19 @@ def _coordinate_transformer(prj_text: str | None) -> Any:
     return Transformer.from_crs(source, CRS.from_epsg(4326), always_xy=True)
 
 
-def _place_coordinate(
+def _wgs84_point(
     x: float | None,
     y: float | None,
     transformer: Any,
-) -> PlaceCoordinate | None:
+) -> tuple[float | None, float | None]:
+    """투영좌표(x, y)를 WGS84 (latitude, longitude)로 변환한다."""
+
     if x is None or y is None:
-        return None
+        return None, None
     if -180 <= x <= 180 and -90 <= y <= 90:
-        return PlaceCoordinate(lat=y, lon=x)
+        return y, x
     lon, lat = transformer.transform(x, y)
-    return PlaceCoordinate(lat=lat, lon=lon)
+    return lat, lon
 
 
 def _shape_geometry(shape: Any, transformer: Any) -> dict[str, Any] | None:
@@ -339,10 +344,10 @@ def _shape_geometry(shape: Any, transformer: Any) -> dict[str, Any] | None:
 def _shape_bbox(shape: Any, transformer: Any) -> tuple[float, float, float, float] | None:
     bbox = getattr(shape, "bbox", None)
     if not bbox or len(bbox) < 4:
-        point = _shape_centroid(shape, transformer)
-        if point is None:
+        lat, lon = _shape_centroid(shape, transformer)
+        if lat is None or lon is None:
             return None
-        return (point.lon, point.lat, point.lon, point.lat)
+        return (lon, lat, lon, lat)
     min_x, min_y, max_x, max_y = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
     min_lon, min_lat = _transform_pair(min_x, min_y, transformer)
     max_lon, max_lat = _transform_pair(max_x, max_y, transformer)
@@ -354,18 +359,20 @@ def _shape_bbox(shape: Any, transformer: Any) -> tuple[float, float, float, floa
     )
 
 
-def _shape_centroid(shape: Any, transformer: Any) -> PlaceCoordinate | None:
+def _shape_centroid(shape: Any, transformer: Any) -> tuple[float | None, float | None]:
+    """SHP shape의 중심점을 WGS84 (latitude, longitude)로 반환한다."""
+
     bbox = getattr(shape, "bbox", None)
     if bbox and len(bbox) >= 4:
         x = (float(bbox[0]) + float(bbox[2])) / 2
         y = (float(bbox[1]) + float(bbox[3])) / 2
         lon, lat = _transform_pair(x, y, transformer)
-        return PlaceCoordinate(lat=lat, lon=lon)
+        return lat, lon
     points = getattr(shape, "points", None) or []
     if not points:
-        return None
+        return None, None
     lon, lat = _transform_pair(float(points[0][0]), float(points[0][1]), transformer)
-    return PlaceCoordinate(lat=lat, lon=lon)
+    return lat, lon
 
 
 def _transform_coordinates(value: Any, transformer: Any) -> Any:
@@ -496,11 +503,15 @@ def _geometry_bbox(geometry: Mapping[str, Any] | None) -> tuple[float, float, fl
     return (min(xs), min(ys), max(xs), max(ys))
 
 
-def _geometry_centroid(geometry: Mapping[str, Any] | None) -> PlaceCoordinate | None:
+def _geometry_centroid(
+    geometry: Mapping[str, Any] | None,
+) -> tuple[float | None, float | None]:
+    """GeoJSON geometry의 bbox 중심을 WGS84 (latitude, longitude)로 반환한다."""
+
     bbox = _geometry_bbox(geometry)
     if bbox is None:
-        return None
-    return PlaceCoordinate(lat=(bbox[1] + bbox[3]) / 2, lon=(bbox[0] + bbox[2]) / 2)
+        return None, None
+    return (bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2
 
 
 def _coordinate_pairs(value: Any) -> Iterator[tuple[float, float]]:

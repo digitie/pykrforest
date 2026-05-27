@@ -28,7 +28,6 @@ dependencies = [
   "pydantic>=2.7",
   "pyproj>=3.6",
   "pyshp>=2.3",
-  "python-kraddr-base>=0.1.5",
 ]
 
 [project.optional-dependencies]
@@ -65,7 +64,6 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.11"
 strict = true
 warn_unused_ignores = true
-mypy_path = "../python-kraddr-base/src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

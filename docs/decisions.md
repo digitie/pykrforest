@@ -146,7 +146,7 @@ data.go.kr 게이트웨이는 인증 실패, 쿼터 초과, 활용신청 미승�
 `ForestClient`는 async-only다. 동기 컨텍스트(Jupyter, 단순 스크립트)에서는 호출자가 `asyncio.run`으로 감싼다.
 
 ### 근거
-- `httpx.AsyncClient`, `kraddr.base` async API와 자연스럽게 결합.
+- `httpx.AsyncClient`와 자연스럽게 결합.
 - `_ratelimit.AsyncTokenBucket`으로 동시성·RPS 제어 단순.
 - `pytest-asyncio`로 테스트 일원화.
 
@@ -206,3 +206,40 @@ data.go.kr 파일 상세 페이지는 다운로드 URL을 HTML/JS로 동적 구�
 
 ### 결과(부정)
 - forest.go.kr는 별도 흐름이라 두 가지 경로를 모두 유지해야 한다.
+
+---
+
+## ADR-008: `python-kraddr-base` 의존성 제거 및 좌표·주소 평탄화
+
+- 상태: accepted
+- 날짜: 2026-05-27
+- 결정자: human
+
+### 컨텍스트
+공공데이터 응답에서 좌표·주소를 노출하기 위해 외부 도메인 패키지 `python-kraddr-base`의 `Address`와 `PlaceCoordinate`를 직접 import해 사용해 왔다. 그러나 이 의존은 (1) 설치 시점 추가 패키지가 필요하고 (2) mypy `mypy_path`에 외부 소스 경로를 끼워 넣어야 하며 (3) 산림청·data.go.kr 데이터에는 `Address`의 상세 필드(우편번호, 행정코드 등) 대부분이 의미 없는 경우가 많았다. ADR-004(얇은 래퍼 금지)에 따른 단순화 원칙과도 충돌이 있었다.
+
+### 결정
+`python-kraddr-base` 의존을 완전히 제거하고, 좌표·주소를 모델에 평탄한 원시 타입으로 노출한다.
+
+- 좌표: `latitude: float | None`, `longitude: float | None`
+- 주소: `address: str | None`
+
+응답 row에서 위 값을 뽑는 책임은 `krforest._convert.extract_coordinate(row)`와 `krforest._convert.extract_address(row)`가 담당한다.
+
+### 근거
+- 패키지 설치·배포 의존을 1단계 줄인다.
+- mypy strict 환경에서 외부 경로(`mypy_path`) 설정을 없앤다.
+- 산림청·data.go.kr 응답의 좌표·주소는 raw row에 그대로 보존되어 있어, 원시 필드로도 충분히 활용 가능하다.
+- 호환성 부담을 의도적으로 끊어, 외부 사용자가 새 필드명(`latitude`/`longitude`/`address`)에 맞춰 마이그레이션하도록 함.
+
+### 결과(긍정)
+- 라이브러리가 `httpx`, `pydantic`, `pyproj`, `pyshp` 4개 의존만으로 동작.
+- 사용자 코드가 외부 도메인 클래스를 import할 필요 없음.
+- 좌표 결측 sentinel(-99, -999, 0)을 `_convert.extract_coordinate`가 일관되게 처리.
+
+### 결과(부정)
+- 기존 API(`item.coordinate`, `item.address.display_address`)를 쓰던 사용자는 코드 변경이 필요(파괴적 변경).
+- 주소의 도로명/지번 분리 같은 추가 정보가 필요한 사용자는 직접 raw row에서 파싱해야 함.
+
+### 후속
+- (open) 사용자 가시 변경 → `__version__`을 `0.2.0`으로 올리고 README/SKILL/문서 모두 새 필드명에 맞춰 갱신.
