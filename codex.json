@@ -25,7 +25,7 @@
         "serve",
         "--mcp"
       ],
-      "cwd": "F:\\dev\\python-krforest-api"
+      "cwd": "F:\\dev\\python-krforest-api-codex"
     }
   }
 }

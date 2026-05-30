@@ -24,4 +24,8 @@
 5. 기존 코드와 테스트 패턴
 6. 최소 범위의 되돌리기 쉬운 변경
 
+## 개발 환경 정책
+
+- **에이전트별 고정 worktree**: ChatGPT Codex는 `F:\dev\python-krforest-api-codex`, Claude Code는 `F:\dev\python-krforest-api-claude`, Google Antigravity 2.0은 `F:\dev\python-krforest-api-antigravity`를 사용한다. 작업마다 브랜치만 새로 만들고, CodeGraph는 worktree마다 1회 `codegraph init -i` 후 `codegraph sync`로 유지한다.
+
 세부 개발 규칙은 `SKILL.md`를 최우선으로 따른다.
