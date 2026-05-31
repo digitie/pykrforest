@@ -120,6 +120,7 @@ docs/
 
 - `rg` 실행 권한 문제 발생 시 PowerShell `Select-String`으로 우회한다.
 - 파일 목록은 `Get-ChildItem -Recurse -File`을 사용한다.
+- git 상태 조회, 브랜치 생성, 커밋, push, PR 작업은 WSL `git` 대신 Windows Git(`C:\Program Files\Git\cmd\git.exe`)를 사용한다. 현재 worktree의 `.git` 파일이 Windows 경로를 가리켜 WSL `git`이 `not a git repository`로 실패할 수 있다.
 - PowerShell 출력에서 한글이 깨질 때는 `Path.read_text(encoding="utf-8")`로 직접 확인한다.
 - `python -m pytest`가 capture 정리 중 오류를 내면 `python -m pytest -s tests`로 실행한다.
 - forest.go.kr 다운로드 흐름은 401/403 대신 HTML 응답을 줄 때가 있다. `_forest_go_request_with_retry`가 지수 백오프로 3회 재시도한다.

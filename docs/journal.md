@@ -2,6 +2,15 @@
 
 역시간순(최근 작업이 위로)으로 작업 사항을 기록합니다. 작업이 완료되면 이 문서에 기록을 추가하세요.
 
+## [2026-05-31] Windows Git 사용 원칙 명시 및 `.codegraph` gitignore 재고정
+- **작업자**: Codex (AI Agent)
+- **내용**:
+  - `AGENTS.md`의 개발 환경 정책에 git 관련 명령은 Windows Git(`C:\Program Files\Git\cmd\git.exe`)를 사용한다는 원칙을 추가.
+  - `SKILL.md`의 로컬 환경 반복 이슈에 WSL `git`이 worktree의 Windows 경로 `.git`를 오해해 실패할 수 있다는 배경과 함께 동일 원칙을 추가.
+  - `.gitignore`의 CodeGraph ignore 패턴을 `.codegraph`로 명시해 디렉터리 이름 자체가 무시되도록 재고정.
+  - `docs/resume.md`를 현재 상태에 맞게 갱신하고 다음 작업에 PR/머지 항목을 반영.
+- **결과**: 에이전트가 이 worktree에서 git 명령을 실행할 때 Windows Git 사용 기준이 문서화되었고, `.codegraph`는 ignore 대상임을 명확히 유지.
+
 ## [2026-05-27] `python-kraddr-base` 의존성 완전 제거 및 좌표·주소 평탄화
 - **작업자**: Antigravity (AI Agent)
 - **내용**:

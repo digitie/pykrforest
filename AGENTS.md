@@ -27,5 +27,6 @@
 ## 개발 환경 정책
 
 - **에이전트별 고정 worktree**: ChatGPT Codex는 `F:\dev\python-krforest-api-codex`, Claude Code는 `F:\dev\python-krforest-api-claude`, Google Antigravity 2.0은 `F:\dev\python-krforest-api-antigravity`를 사용한다. 작업마다 브랜치만 새로 만들고, CodeGraph는 worktree마다 1회 `codegraph init -i` 후 `codegraph sync`로 유지한다.
+- **git 실행 원칙**: 이 저장소의 git 상태 조회, 브랜치 작업, 커밋, push, PR 관련 명령은 WSL `git` 대신 Windows Git(`C:\Program Files\Git\cmd\git.exe`) 기준으로 실행한다. 현재 worktree의 `.git` 파일이 Windows 경로를 가리키므로 WSL `git`이 이를 오해해 실패할 수 있다.
 
 세부 개발 규칙은 `SKILL.md`를 최우선으로 따른다.
