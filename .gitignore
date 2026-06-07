@@ -10,5 +10,5 @@ dist/
 .env
 .env.*
 !.env.example
-.codegraph/
+.codegraph
 .env.local
