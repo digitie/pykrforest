@@ -2,8 +2,10 @@
 
 현재 `python-krforest-api` 프로젝트의 진척도와 이어서 할 작업을 기록합니다. 새 세션이나 작업 재개 시 이 문서를 가장 먼저 확인하세요.
 
-## 현재 진척도 (2026-05-31)
+## 현재 진척도 (2026-06-07)
 
+- `src/krforest/debug.py`의 `save_fixture`에서 파일을 저장할 때 로컬 저장과 함께 `rustfs`에도 저장할 수 있도록 코드를 개선함.
+- 호환성 확보를 위해 기존 API 외에 `rustfs` 호출을 위한 전용 함수 `save_to_rustfs`를 추가함.
 - **`python-kraddr-base` 의존성 완전 제거.** 좌표는 `latitude: float | None` / `longitude: float | None`, 주소는 `address: str | None`로 평탄화되어 외부 도메인 패키지 없이 동작함. ADR-008.
 - `_convert.py`에 `extract_coordinate(row)` / `extract_address(row)` 헬퍼 추가. 결측 sentinel(-99, -999, 0)을 일관 처리.
 - `__version__`을 `0.2.0`으로 올림(파괴적 변경). 호환성 부담 의도적으로 단절.

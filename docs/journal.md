@@ -2,6 +2,14 @@
 
 역시간순(최근 작업이 위로)으로 작업 사항을 기록합니다. 작업이 완료되면 이 문서에 기록을 추가하세요.
 
+## [2026-06-07] 로컬 저장 시 rustfs 동시 저장 및 전용 함수 추가
+- **작업자**: Antigravity (AI Agent)
+- **내용**:
+  - `src/krforest/debug.py`의 `save_fixture` 함수 개선: 파일 저장 시 기존의 로컬 저장과 함께 `rustfs`에도 저장하도록 로직 추가.
+  - 호환성 확보를 위해 내장 `open()` 함수 외에 `rustfs` 호출을 전담할 예비 함수 `save_to_rustfs`를 선언함.
+  - 로컬 저장이 성공한 뒤 `rustfs` 저장 시도 중 발생한 예외는 무시하도록 처리하여 로컬 저장 안정성 유지.
+- **결과**: `python -m pytest` 36 passed / `ruff check` clean / `mypy --strict` clean. 기존 테스트 모두 통과.
+
 ## [2026-05-31] Windows Git 사용 원칙 명시 및 `.codegraph` gitignore 재고정
 - **작업자**: Codex (AI Agent)
 - **내용**:

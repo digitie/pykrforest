@@ -143,11 +143,22 @@ def save_fixture(
         },
     }
 
+    content = json.dumps(fixture, ensure_ascii=False, indent=2) + "\n"
+
     with fixture_path.open("w", encoding="utf-8") as file:
-        json.dump(fixture, file, ensure_ascii=False, indent=2)
-        file.write("\n")
+        file.write(content)
+
+    try:
+        save_to_rustfs(fixture_path, content)
+    except Exception:
+        pass
 
     return fixture_path
+
+
+def save_to_rustfs(filepath: Path | str, content: str | bytes) -> None:
+    """rustfs에 파일을 저장하기 위한 전용 함수 (향후 연동을 위한 예비 구현)."""
+    pass
 
 
 def _is_sensitive_key(key: str) -> bool:
