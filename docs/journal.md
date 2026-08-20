@@ -11,8 +11,12 @@
     `source_file`과 결합하고, 식별자가 없을 때만 raw/geometry SHA-1을 사용한다.
   - 산 이름·구간 이름을 결합한 표시명과 WGS84 route geometry를 보존한다.
   - CRS transformer 캐시로 수천 개 SHP layer의 반복 초기화 비용을 제거했다.
-  - 실측 저메모리 census: 265,601,808 bytes / nested SHP ZIP 2,932개 / 피처
-    164,185개 / LineString 56,869개 / MultiLineString 191개 / source-id 중복 3개.
+  - 실측 저메모리 census: 265,601,808 bytes / nested SHP ZIP 2,932개 / 원천 피처
+    164,185개 / LineString 56,869개 / MultiLineString 191개. 동일 필드·geometry의
+    완전 중복 3건은 parser에서 first-wins 제거한다.
+  - route-only live parse는 Point를 제외하고 57,060개(LineString 56,869 /
+    MultiLineString 191)를 반환했으며, 이름·geometry·source_id와 source_id 유일성을
+    모두 확인했다.
 - **검증**: 중첩 SHP 단위 테스트 2 passed, `ruff check .` 통과. 서비스키가 없는
   환경에서는 data.go.kr live API 테스트를 실행하지 않았고, 산림 파일 census는
   forest.go.kr에서 별도 완료했다.

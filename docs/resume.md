@@ -11,11 +11,15 @@
   세그먼트 식별자를 우선 사용한다. 산 이름과 구간 이름(`MNTN_NM`·`PMNTN_NM`)도
   표시명으로 결합한다.
 - 실측 census(2026-08-20): PBD0000041 265,601,808 bytes, 중첩 SHP ZIP 2,932개,
-  전체 피처 164,185개(Point 107,125 / LineString 56,869 / MultiLineString 191),
-  `source_id` 고유값 164,182개. 지도 경로 승격 대상은 LineString/MultiLineString이다.
+  원천 피처 164,185개(Point 107,125 / LineString 56,869 / MultiLineString 191),
+  그중 완전 중복 3건을 first-wins 제거하면 공개 피처는 164,182개다. 지도 경로
+  승격 대상은 LineString/MultiLineString이다.
 - 반복적인 CRS 생성 비용을 줄이기 위해 `_coordinate_transformer`를 캐시한다. 저메모리
   census는 완료했으며, 전체 DTO materialization은 지도 ETL에서 필요한 geometry gate와
   중복 제거를 먼저 확정한 뒤 별도 live 검증한다.
+- route-only live parse(2026-08-20)는 `forest_trail_file_features()`에서 Point를
+  만들지 않고 LineString 56,869개와 MultiLineString 191개, 총 57,060개를 반환했다.
+  이름·geometry·source_id가 모두 채워졌고 source_id 고유값도 57,060개였다.
 - 중첩 SHP 회귀 테스트와 `ruff check .`가 통과했다. 둘레길 source-id live test는
   서비스키가 있는 환경에서 실행한다.
 

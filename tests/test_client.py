@@ -84,6 +84,29 @@ def nested_line_shp_zip(tmp_path) -> bytes:
     return archive_path.read_bytes()
 
 
+def same_name_line_shp_zip(tmp_path) -> bytes:
+    import zipfile
+
+    import shapefile
+
+    base = tmp_path / "same-name"
+    writer = shapefile.Writer(str(base), shapeType=shapefile.POLYLINE, encoding="cp949")
+    writer.field("Name", "C", size=80)
+    writer.field("ID", "C", size=20)
+    writer.line([[(953901.165, 1952032.08), (954901.165, 1953032.08)]])
+    writer.record("같은 노선명", "DULE-1")
+    writer.line([[(953901.165, 1952032.08), (955901.165, 1954032.08)]])
+    writer.record("같은 노선명", "DULE-2")
+    writer.close()
+    base.with_suffix(".prj").write_text(KOREA_2000_UNIFIED_WKT, encoding="ascii")
+
+    archive_path = tmp_path / "same-name.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for suffix in (".shp", ".shx", ".dbf", ".prj"):
+            archive.write(base.with_suffix(suffix), arcname=f"same-name{suffix}")
+    return archive_path.read_bytes()
+
+
 def binary_zip(tmp_path) -> bytes:
     import zipfile
 
@@ -531,7 +554,24 @@ async def test_forest_trail_features_parse_nested_shp_archive(
     assert feature.dataset_id == "PBD0000041"
     assert feature.geometry_type == "LineString"
     assert feature.source_id is not None
-    assert feature.source_id.endswith(":Name:지리산둘레길 테스트")
+    assert ":keys:" in feature.source_id
+
+
+async def test_spatial_source_id_keeps_same_name_segments_distinct(
+    fake_client_factory,
+    tmp_path,
+):
+    archive = same_name_line_shp_zip(tmp_path)
+    client, _session = fake_client_factory(
+        FakeResponse(text="<html>popup</html>"),
+        FakeResponse(status_code=302, text="moved"),
+        FakeResponse(content=archive),
+    )
+
+    features = await client.travel.dulle_trail_features()
+
+    assert len(features) == 2
+    assert len({feature.source_id for feature in features}) == 2
 
 
 async def test_file_download_url_missing_content_url_raises(fake_client_factory):

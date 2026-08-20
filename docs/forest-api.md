@@ -68,10 +68,12 @@ Notes:
   files and return `ForestSpatialFeature` records with WGS84 geometry metadata.
   `PBD0000041` is an aggregate archive: the canonical SHP layers are nested in
   one ZIP per region, while sibling `_geojson.zip`/`_gpx.zip` archives contain
-  alternate copies and are not emitted a second time. Each record has a
-  reproducible `source_id`; mountain records use `PMNTN_SN` when present and
-  둘레길 records use the source segment identifier. The route name combines
-  `MNTN_NM` and `PMNTN_NM` when both are available.
+  alternate copies and are not emitted a second time. Each emitted record has
+  a non-null, reproducible opaque `source_id` scoped to the dataset. The key is
+  a fingerprint of the source file and all available stable source fields
+  (`PMNTN_SN`, `Name`, `ID`, and similar); geometry is used only when no source
+  identity exists. Exact duplicate rows are first-wins deduplicated. The route
+  name combines `MNTN_NM` and `PMNTN_NM` when both are available.
 - `client.safety.landslide_risk_map_files()` downloads the forest.go.kr
   산사태위험지도 ZIP and returns a filename-keyed `dict[str, bytes]` because the
   dataset is raster TIF/XML/PDF rather than record-shaped vector data.

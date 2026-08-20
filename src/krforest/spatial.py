@@ -8,7 +8,7 @@ import json
 import posixpath
 import xml.etree.ElementTree as ET
 import zipfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from functools import lru_cache
 from typing import Any
 
@@ -120,12 +120,15 @@ def forest_spatial_features(
     dataset: FileDataset,
     *,
     name: str | None = None,
+    geometry_types: Collection[str] | None = None,
 ) -> tuple[ForestSpatialFeature, ...]:
     """SHP/GeoJSON/GPX ZIP bytes를 지도 앱에서 쓰기 쉬운 피처 tuple로 변환한다."""
 
     archive = _open_archive(data)
     name_filter = strip_or_none(name)
+    geometry_type_filter = frozenset(geometry_types) if geometry_types is not None else None
     features: list[ForestSpatialFeature] = []
+    seen_source_ids: set[str] = set()
 
     for reader, prj_text, source_file, layer_name in _open_readers_from_archive(archive):
         transformer = _coordinate_transformer(prj_text)
@@ -135,7 +138,14 @@ def forest_spatial_features(
             if name_filter is not None and name_filter not in (feature_name or ""):
                 continue
 
+            shape_geometry_type = _shape_geometry_type(shape_record.shape)
+            if geometry_type_filter is not None and shape_geometry_type not in geometry_type_filter:
+                continue
             geometry = _shape_geometry(shape_record.shape, transformer)
+            source_id = _feature_source_id(raw, source_file, geometry)
+            if source_id in seen_source_ids:
+                continue
+            seen_source_ids.add(source_id)
             latitude, longitude = _shape_centroid(shape_record.shape, transformer)
             features.append(
                 ForestSpatialFeature(
@@ -143,9 +153,9 @@ def forest_spatial_features(
                     dataset_name=dataset.title,
                     source_file=source_file,
                     layer_name=layer_name,
-                    source_id=_feature_source_id(raw, source_file, geometry),
+                    source_id=source_id,
                     name=feature_name,
-                    geometry_type=_geometry_type(geometry),
+                    geometry_type=shape_geometry_type or _geometry_type(geometry),
                     geometry=geometry,
                     bbox=_shape_bbox(shape_record.shape, transformer),
                     latitude=latitude,
@@ -163,6 +173,13 @@ def forest_spatial_features(
             geometry = feature.get("geometry")
             if not isinstance(geometry, Mapping):
                 geometry = None
+            geometry_type = _geometry_type(geometry)
+            if geometry_type_filter is not None and geometry_type not in geometry_type_filter:
+                continue
+            source_id = _feature_source_id(raw, source_file, geometry)
+            if source_id in seen_source_ids:
+                continue
+            seen_source_ids.add(source_id)
             latitude, longitude = _geometry_centroid(geometry)
             features.append(
                 ForestSpatialFeature(
@@ -170,9 +187,9 @@ def forest_spatial_features(
                     dataset_name=dataset.title,
                     source_file=source_file,
                     layer_name=_layer_name(source_file),
-                    source_id=_feature_source_id(raw, source_file, geometry),
+                    source_id=source_id,
                     name=feature_name,
-                    geometry_type=_geometry_type(geometry),
+                    geometry_type=geometry_type,
                     geometry=dict(geometry) if geometry is not None else None,
                     bbox=_geometry_bbox(geometry),
                     latitude=latitude,
@@ -189,6 +206,13 @@ def forest_spatial_features(
         geometry = feature.get("geometry")
         if not isinstance(geometry, Mapping):
             geometry = None
+        geometry_type = _geometry_type(geometry)
+        if geometry_type_filter is not None and geometry_type not in geometry_type_filter:
+            continue
+        source_id = _feature_source_id(raw, source_file, geometry)
+        if source_id in seen_source_ids:
+            continue
+        seen_source_ids.add(source_id)
         latitude, longitude = _geometry_centroid(geometry)
         features.append(
             ForestSpatialFeature(
@@ -196,9 +220,9 @@ def forest_spatial_features(
                 dataset_name=dataset.title,
                 source_file=source_file,
                 layer_name=_layer_name(source_file),
-                source_id=_feature_source_id(raw, source_file, geometry),
+                source_id=source_id,
                 name=feature_name,
-                geometry_type=_geometry_type(geometry),
+                geometry_type=geometry_type,
                 geometry=dict(geometry) if geometry is not None else None,
                 bbox=_geometry_bbox(geometry),
                 latitude=latitude,
@@ -338,10 +362,20 @@ def _feature_source_id(
 ) -> str:
     """파일 피처의 재실행 가능한 source natural key를 만든다."""
 
-    for key in _SOURCE_ID_KEYS:
-        value = first_text(raw, key)
-        if value is not None:
-            return f"{source_file}:{key}:{value}"
+    stable_fields = {
+        key: value
+        for key in _SOURCE_ID_KEYS
+        if (value := first_text(raw, key)) is not None
+    }
+    if stable_fields:
+        canonical = json.dumps(
+            {"fields": stable_fields, "source_file": source_file},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        digest = hashlib.sha1(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()
+        return f"{source_file}:keys:{digest}"
 
     canonical = json.dumps(
         {"geometry": geometry, "raw": dict(raw)},
@@ -431,6 +465,11 @@ def _shape_geometry(shape: Any, transformer: Any) -> dict[str, Any] | None:
         "type": geometry.get("type"),
         "coordinates": _transform_coordinates(coordinates, transformer),
     }
+
+
+def _shape_geometry_type(shape: Any) -> str | None:
+    geometry = getattr(shape, "__geo_interface__", None)
+    return geometry.get("type") if isinstance(geometry, Mapping) else None
 
 
 def _shape_bbox(shape: Any, transformer: Any) -> tuple[float, float, float, float] | None:

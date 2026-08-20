@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, TypeVar
@@ -489,7 +489,11 @@ class TravelNamespace:
     ) -> tuple[ForestSpatialFeature, ...]:
         """산림청 등산로정보 ZIP을 공간 feature DTO로 반환한다."""
 
-        return await self._client.files.spatial_features("PBD0000041", name=name)
+        return await self._client.files.spatial_features(
+            "PBD0000041",
+            name=name,
+            geometry_types={"LineString", "MultiLineString"},
+        )
 
     async def dulle_trail_features(
         self,
@@ -498,7 +502,11 @@ class TravelNamespace:
     ) -> tuple[ForestSpatialFeature, ...]:
         """산림청 둘레길정보 ZIP을 공간 feature DTO로 반환한다."""
 
-        return await self._client.files.spatial_features("PBD0000031", name=name)
+        return await self._client.files.spatial_features(
+            "PBD0000031",
+            name=name,
+            geometry_types={"LineString", "MultiLineString"},
+        )
 
     async def forest_education_centers(
         self,
@@ -774,11 +782,21 @@ class FileDataNamespace:
         data_go_id: str,
         *,
         name: str | None = None,
+        geometry_types: Collection[str] | None = None,
     ) -> tuple[ForestSpatialFeature, ...]:
-        """SHP/GeoJSON/GPX 파일데이터를 공간 feature DTO로 반환한다."""
+        """SHP/GeoJSON/GPX 파일데이터를 공간 feature DTO로 반환한다.
+
+        `geometry_types`를 주면 해당 geometry만 좌표 변환·DTO 생성한다. 대형
+        aggregate route archive에서 Point 레코드를 제외할 때 사용한다.
+        """
 
         dataset = file_dataset(data_go_id)
-        return forest_spatial_features(await self.download(data_go_id), dataset, name=name)
+        return forest_spatial_features(
+            await self.download(data_go_id),
+            dataset,
+            name=name,
+            geometry_types=geometry_types,
+        )
 
 
 def _page_params(
