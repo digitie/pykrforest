@@ -2,6 +2,19 @@
 
 역시간순(최근 작업이 위로)으로 작업 사항을 기록합니다. 작업이 완료되면 이 문서에 기록을 추가하세요.
 
+## [2026-08-20] C05B~C05D 리뷰 반영 및 경계 보안 보강
+- **작업자**: Codex
+- **내용**:
+  - `WildfireScope` Literal을 도입해 `mypy --strict` typed parser 오류를 제거했다.
+  - V2 시군구 응답에서 `sigucode`/`sigun`을 우선해 지역 identity가 상위 시도 코드로
+    잘못 잡히지 않게 했다.
+  - Name-only SHP layer의 source ID hash에 geometry를 포함해 서로 다른 route가
+    first-wins dedup으로 합쳐지지 않게 했다.
+  - JSON/XML body-level 인증 오류의 메시지와 구조화 response에서 service key를
+    재귀 redaction했다.
+- **검증**: `pytest -q` 42 passed / live 11 skipped, `ruff check src tests`,
+  `mypy --strict src/krforest` 통과.
+
 ## [2026-08-20] C05A 중첩 SHP 등산로 파서·source natural key 보강
 - **작업자**: Codex
 - **내용**:

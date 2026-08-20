@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 from ._convert import extract_address, extract_coordinate, to_float_or_none
 from .models import (
@@ -17,6 +17,7 @@ from .models import (
 )
 
 KST = timezone(timedelta(hours=9))
+WildfireScope = Literal["national", "sido", "sigungu"]
 
 _INSTITUTION_ID_KEYS = (
     "institution_id",
@@ -75,18 +76,40 @@ def parse_mountain_weather(row: dict[str, Any]) -> MountainWeather:
 
 
 def parse_wildfire_risk_forecast(
-    row: dict[str, Any], *, scope: str = "national"
+    row: dict[str, Any], *, scope: WildfireScope = "national"
 ) -> WildfireRiskForecast:
     """산불위험지수 V2 전국·시도·시군구 row를 typed 모델로 파싱한다."""
 
     if scope not in {"national", "sido", "sigungu"}:
         raise ValueError(f"unsupported wildfire risk scope: {scope!r}")
+    if scope == "sigungu":
+        region_code = first_text(
+            row,
+            "sigucode",
+            "sigunguCode",
+            "시군구코드",
+            "regioncode",
+            "regionCode",
+            "지역코드",
+        )
+        region_name = first_text(
+            row,
+            "sigun",
+            "sigunguName",
+            "regionName",
+            "시군구명",
+            "doname",
+            "시도명",
+        )
+    else:
+        region_code = first_text(row, "regioncode", "regionCode", "지역코드", "sigucode")
+        region_name = first_text(row, "doname", "regionName", "시도명", "sigun", "시군구명")
     return WildfireRiskForecast(
         scope=scope,
         analysis_at=parse_datetime(first_text(row, "analdate", "analysisAt", "분석일시")),
         area=first_text(row, "area", "areaName", "지역"),
-        region_code=first_text(row, "regioncode", "regionCode", "지역코드", "sigucode"),
-        region_name=first_text(row, "doname", "sigun", "regionName", "시도명", "시군구명"),
+        region_code=region_code,
+        region_name=region_name,
         upper_region_code=first_text(row, "upplocalcd", "upperRegionCode", "상위지역코드"),
         d1=_first_float(row, "d1"),
         d2=_first_float(row, "d2"),

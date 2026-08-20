@@ -22,12 +22,18 @@
   이름·geometry·source_id가 모두 채워졌고 source_id 고유값도 57,060개였다.
 - 중첩 SHP 회귀 테스트와 `ruff check .`가 통과했다. 둘레길 source-id live test는
   서비스키가 있는 환경에서 실행한다.
+- C05B 산악기상, C05C 산불위험 V2(전국·시도·시군구), C05D 산사태 예보발령을
+  typed model/parser/client로 구현했다. 산불 시군구 응답은 `sigucode`를 지역 코드로
+  우선 사용하며, provider body-level 인증 오류와 Name-only 공간 피처의 ID 충돌도
+  보완했다.
+- 전체 provider 단위 테스트 42 passed, live 11 skipped(환경변수 미설정), `ruff`와
+  `mypy --strict src/krforest`가 통과했다.
 
 ## 다음 해야 할 작업 (Next Task)
 
-- [ ] 전문 리뷰어 2명의 독립적 적대적 리뷰를 반영한 뒤 PR 생성·CI·머지.
-- [ ] `kor-travel-map`에서 C05A route 변환과 월 1회 schedule을 구현.
-- [ ] C05B~C05D typed API와 하루 6회 schedule을 순차 구현.
+- [ ] 전문 리뷰어 2명의 독립적 적대적 리뷰를 모두 반영한 뒤 PR CI·머지.
+- [ ] `kor-travel-map`에서 C05A route 및 C05B~C05D safety ETL 연결과 schedule을
+  구현하고 provider pin을 병합 SHA로 갱신.
 
 ## 현재 진척도 (2026-06-07)
 

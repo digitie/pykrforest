@@ -368,8 +368,17 @@ def _feature_source_id(
         if (value := first_text(raw, key)) is not None
     }
     if stable_fields:
+        identity_payload: dict[str, Any] = {
+            "fields": stable_fields,
+            "source_file": source_file,
+        }
+        # Name-only DBF layers do not expose a row identity.  Including the
+        # canonical geometry prevents first-wins dedup from merging distinct
+        # segments that happen to share a display name.
+        if set(key.lower() for key in stable_fields) <= {"name"}:
+            identity_payload["geometry"] = geometry
         canonical = json.dumps(
-            {"fields": stable_fields, "source_file": source_file},
+            identity_payload,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),

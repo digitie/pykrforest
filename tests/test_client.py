@@ -107,6 +107,28 @@ def same_name_line_shp_zip(tmp_path) -> bytes:
     return archive_path.read_bytes()
 
 
+def same_name_without_id_line_shp_zip(tmp_path) -> bytes:
+    import zipfile
+
+    import shapefile
+
+    base = tmp_path / "same-name-no-id"
+    writer = shapefile.Writer(str(base), shapeType=shapefile.POLYLINE, encoding="cp949")
+    writer.field("Name", "C", size=80)
+    writer.line([[(953901.165, 1952032.08), (954901.165, 1953032.08)]])
+    writer.record("같은 노선명")
+    writer.line([[(953901.165, 1952032.08), (955901.165, 1954032.08)]])
+    writer.record("같은 노선명")
+    writer.close()
+    base.with_suffix(".prj").write_text(KOREA_2000_UNIFIED_WKT, encoding="ascii")
+
+    archive_path = tmp_path / "same-name-no-id.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for suffix in (".shp", ".shx", ".dbf", ".prj"):
+            archive.write(base.with_suffix(suffix), arcname=f"same-name-no-id{suffix}")
+    return archive_path.read_bytes()
+
+
 def binary_zip(tmp_path) -> bytes:
     import zipfile
 
@@ -173,24 +195,38 @@ async def test_data_go_json_endpoint_adds_type_and_parses_items(fake_client_fact
 
 
 async def test_wildfire_risk_sido_and_sigungu_use_v2_filters(fake_client_factory):
-    payload = public_payload({"doname": "강원특별자치도", "meanavg": "18"})
-    client, session = fake_client_factory(FakeResponse(payload), FakeResponse(payload))
+    sido_payload = public_payload({"doname": "강원특별자치도", "meanavg": "18"})
+    sigungu_payload = public_payload(
+        {
+            "doname": "강원특별자치도",
+            "sigun": "속초시",
+            "regioncode": "51",
+            "sigucode": "51820",
+            "meanavg": "18",
+        }
+    )
+    client, session = fake_client_factory(
+        FakeResponse(sido_payload), FakeResponse(sigungu_payload)
+    )
 
     sido = await client.safety.wildfire_risk_forecast_sido(
-        local_areas="42", num_of_rows=1
+        local_areas="51000", num_of_rows=1
     )
     sigungu = await client.safety.wildfire_risk_forecast_sigungu(
-        local_areas="42", upper_local_code="42000", num_of_rows=1
+        local_areas="51820", upper_local_code="51", num_of_rows=1
     )
 
     assert sido.items[0].scope == "sido"
     assert session.calls[0]["url"].endswith("/forestPointV2/forestPointListSidoSearchV2")
-    assert session.calls[0]["params"]["localAreas"] == "42"
+    assert session.calls[0]["params"]["localAreas"] == "51000"
     assert sigungu.items[0].scope == "sigungu"
     assert session.calls[1]["url"].endswith(
         "/forestPointV2/forestPointListSigunguSearchV2"
     )
-    assert session.calls[1]["params"]["upplocalcd"] == "42000"
+    assert session.calls[1]["params"]["localAreas"] == "51820"
+    assert session.calls[1]["params"]["upplocalcd"] == "51"
+    assert sigungu.items[0].region_code == "51820"
+    assert sigungu.items[0].region_name == "속초시"
 
 
 async def test_standard_recreation_forests_uses_type_param_and_models(fake_client_factory):
@@ -479,6 +515,20 @@ async def test_auth_error_redacts_key(fake_client_factory):
     assert exc_info.value.failure_kind == "auth"
 
 
+async def test_body_level_auth_error_redacts_key_from_message_and_response(
+    fake_client_factory,
+):
+    payload = public_payload(None, result_code="20", result_msg="bad TEST_KEY")
+    client, _session = fake_client_factory(FakeResponse(payload))
+
+    with pytest.raises(ForestAuthError) as exc_info:
+        await client.travel.forest_services()
+
+    assert "TEST_KEY" not in str(exc_info.value)
+    assert "TEST_KEY" not in repr(exc_info.value.response)
+    assert "[redacted]" in str(exc_info.value)
+
+
 async def test_file_download_url_from_json_ld(fake_client_factory):
     html = """
     <html><head>
@@ -640,6 +690,23 @@ async def test_spatial_source_id_keeps_same_name_segments_distinct(
     tmp_path,
 ):
     archive = same_name_line_shp_zip(tmp_path)
+    client, _session = fake_client_factory(
+        FakeResponse(text="<html>popup</html>"),
+        FakeResponse(status_code=302, text="moved"),
+        FakeResponse(content=archive),
+    )
+
+    features = await client.travel.dulle_trail_features()
+
+    assert len(features) == 2
+    assert len({feature.source_id for feature in features}) == 2
+
+
+async def test_spatial_source_id_keeps_name_only_segments_distinct(
+    fake_client_factory,
+    tmp_path,
+):
+    archive = same_name_without_id_line_shp_zip(tmp_path)
     client, _session = fake_client_factory(
         FakeResponse(text="<html>popup</html>"),
         FakeResponse(status_code=302, text="moved"),
