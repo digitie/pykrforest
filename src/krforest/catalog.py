@@ -87,10 +87,12 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         provider="data.go.kr",
         service="1400377/mtweather",
         operation="mountListSearch",
-        url="http://apis.data.go.kr/1400377/mtweather/mountListSearch",
+        url="https://apis.data.go.kr/1400377/mtweather/mountListSearch",
         detail_url=f"{DATA_GO_BASE}/15084696/openapi.do",
         description="산악기상 관측 지점과 기상 정보를 조회한다.",
         notes="일부 인증키는 별도 활용신청 전 HTTP 403을 반환할 수 있다.",
+        response_format="json",
+        response_type_param="_type",
     ),
     ApiEndpoint(
         key="national_recreation_forest_reservations",
@@ -139,12 +141,53 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         data_go_id="15084817",
         categories=("safety",),
         provider="data.go.kr",
-        service="1400377/forestPoint",
-        operation="forestPointListGeongugSearch",
-        url="http://apis.data.go.kr/1400377/forestPoint/forestPointListGeongugSearch",
+        service="1400377/forestPointV2",
+        operation="forestPointListGeongugSearchV2",
+        url=(
+            "https://apis.data.go.kr/1400377/forestPointV2/"
+            "forestPointListGeongugSearchV2"
+        ),
         detail_url=f"{DATA_GO_BASE}/15084817/openapi.do",
         description="전국 단위 산불위험 예보지수와 위험등급 통계를 제공한다.",
-        notes="3시간 간격 예보 계열이며 일부 인증키는 별도 활용신청이 필요하다.",
+        notes="V2는 72시간 예보를 3시간 간격으로 제공하며 일부 인증키는 별도 활용신청이 필요하다.",
+        response_format="json",
+        response_type_param="_type",
+    ),
+    ApiEndpoint(
+        key="wildfire_risk_forecast_sido",
+        title="산림청 국립산림과학원_산불위험예보정보(시도)",
+        data_go_id="15084817",
+        categories=("safety",),
+        provider="data.go.kr",
+        service="1400377/forestPointV2",
+        operation="forestPointListSidoSearchV2",
+        url=(
+            "https://apis.data.go.kr/1400377/forestPointV2/"
+            "forestPointListSidoSearchV2"
+        ),
+        detail_url=f"{DATA_GO_BASE}/15084817/openapi.do",
+        description="시도별 산불위험 예보지수와 위험등급 통계를 제공한다.",
+        notes="localAreas 요청 파라미터로 시도 범위를 선택한다.",
+        response_format="json",
+        response_type_param="_type",
+    ),
+    ApiEndpoint(
+        key="wildfire_risk_forecast_sigungu",
+        title="산림청 국립산림과학원_산불위험예보정보(시군구)",
+        data_go_id="15084817",
+        categories=("safety",),
+        provider="data.go.kr",
+        service="1400377/forestPointV2",
+        operation="forestPointListSigunguSearchV2",
+        url=(
+            "https://apis.data.go.kr/1400377/forestPointV2/"
+            "forestPointListSigunguSearchV2"
+        ),
+        detail_url=f"{DATA_GO_BASE}/15084817/openapi.do",
+        description="시군구별 산불위험 예보지수와 위험등급 통계를 제공한다.",
+        notes="localAreas와 upplocalcd 요청 파라미터로 시군구 범위를 선택한다.",
+        response_format="json",
+        response_type_param="_type",
     ),
     ApiEndpoint(
         key="wildfire_stats",
@@ -191,9 +234,11 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         provider="data.go.kr",
         service="1400000/forecastIssueService",
         operation="forecastIssueList",
-        url="http://apis.data.go.kr/1400000/forecastIssueService/forecastIssueList",
+        url="https://apis.data.go.kr/1400000/forecastIssueService/forecastIssueList",
         detail_url=f"{DATA_GO_BASE}/15074798/openapi.do",
         description="산사태 예보 발령·해제 이력, 기관, 상태 정보를 조회한다.",
+        response_format="json",
+        response_type_param="_type",
     ),
     ApiEndpoint(
         key="roadside_landslides",

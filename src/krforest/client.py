@@ -38,18 +38,22 @@ from .models import (
     FileDataset,
     ForestSpatialFeature,
     ForestSpatialPoint,
+    LandslideForecastIssue,
     MountainWeather,
     Page,
     RawRecord,
     RecreationForest,
     RecreationForestReservation,
     StandardRecreationForest,
+    WildfireRiskForecast,
 )
 from .parser import (
     parse_erosion_control_dam,
+    parse_landslide_forecast_issue,
     parse_mountain_weather,
     parse_recreation_forest_reservation,
     parse_standard_recreation_forest,
+    parse_wildfire_risk_forecast,
 )
 from .processor import (
     RECREATION_FOREST_FACILITY_ID,
@@ -606,17 +610,60 @@ class SafetyNamespace:
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
-    ) -> Page[RawRecord]:
-        """전국 산불위험 예보지도 레코드를 조회한다."""
+    ) -> Page[WildfireRiskForecast]:
+        """V2 전국 산불위험 예보지수 레코드를 typed 모델로 조회한다."""
 
         query = dict(params)
         if exclude_forecast is not None:
             query["excludeForecast"] = int(bool(exclude_forecast))
-        return await self._client.raw_endpoint(
-            "wildfire_risk_forecast",
-            query,
-            page_no=page_no,
-            num_of_rows=num_of_rows,
+        return await self._client._page(
+            api_endpoint("wildfire_risk_forecast"),
+            _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            lambda row: parse_wildfire_risk_forecast(row, scope="national"),
+        )
+
+    async def wildfire_risk_forecast_sido(
+        self,
+        *,
+        local_areas: str | None = None,
+        exclude_forecast: bool | int | None = None,
+        page_no: int = 1,
+        num_of_rows: int = 10,
+        **params: Any,
+    ) -> Page[WildfireRiskForecast]:
+        """V2 시도별 산불위험 예보지수 레코드를 조회한다."""
+
+        query = dict(params)
+        query["localAreas"] = local_areas
+        if exclude_forecast is not None:
+            query["excludeForecast"] = int(bool(exclude_forecast))
+        return await self._client._page(
+            api_endpoint("wildfire_risk_forecast_sido"),
+            _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            lambda row: parse_wildfire_risk_forecast(row, scope="sido"),
+        )
+
+    async def wildfire_risk_forecast_sigungu(
+        self,
+        *,
+        local_areas: str | None = None,
+        upper_local_code: str | None = None,
+        exclude_forecast: bool | int | None = None,
+        page_no: int = 1,
+        num_of_rows: int = 10,
+        **params: Any,
+    ) -> Page[WildfireRiskForecast]:
+        """V2 시군구별 산불위험 예보지수 레코드를 조회한다."""
+
+        query = dict(params)
+        query["localAreas"] = local_areas
+        query["upplocalcd"] = upper_local_code
+        if exclude_forecast is not None:
+            query["excludeForecast"] = int(bool(exclude_forecast))
+        return await self._client._page(
+            api_endpoint("wildfire_risk_forecast_sigungu"),
+            _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            lambda row: parse_wildfire_risk_forecast(row, scope="sigungu"),
         )
 
     async def past_landslides(
@@ -657,14 +704,13 @@ class SafetyNamespace:
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
-    ) -> Page[RawRecord]:
-        """산사태 예보 발령 레코드를 조회한다."""
+    ) -> Page[LandslideForecastIssue]:
+        """산사태 예보 발령 레코드를 typed 모델로 조회한다."""
 
-        return await self._client.raw_endpoint(
-            "landslide_forecast_issues",
-            params,
-            page_no=page_no,
-            num_of_rows=num_of_rows,
+        return await self._client._page(
+            api_endpoint("landslide_forecast_issues"),
+            _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
+            parse_landslide_forecast_issue,
         )
 
     async def roadside_landslides(

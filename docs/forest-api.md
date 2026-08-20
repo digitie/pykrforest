@@ -28,7 +28,9 @@ outdoor recreation, wildfire, landslide, and forest safety data.
 | `mountain_weather` | travel, safety | data.go.kr | 15084696 | `1400377/mtweather/mountListSearch` |
 | `national_recreation_forest_reservations` | travel | data.go.kr | 15134227 | `1400000/nationalRecreationForestReservationService/nationalRecreationForestReservationList` |
 | `standard_recreation_forests` | travel | data.go.kr | 15013111 | `openapi/tn_pubr_public_rcrfrst_api` |
-| `wildfire_risk_forecast` | safety | data.go.kr | 15084817 | `1400377/forestPoint/forestPointListGeongugSearch` |
+| `wildfire_risk_forecast` | safety | data.go.kr | 15084817 | `1400377/forestPointV2/forestPointListGeongugSearchV2` |
+| `wildfire_risk_forecast_sido` | safety | data.go.kr | 15084817 | `1400377/forestPointV2/forestPointListSidoSearchV2` |
+| `wildfire_risk_forecast_sigungu` | safety | data.go.kr | 15084817 | `1400377/forestPointV2/forestPointListSigunguSearchV2` |
 | `wildfire_stats` | safety | data.go.kr | 3070842 | `1400000/forestStusService/getfirestatsservice` |
 | `past_landslides` | safety | data.go.kr | 15074816 | `1400000/pastLndslInfoService/pastLndslInfoList` |
 | `landslide_predictions` | safety | data.go.kr | 15074800 | `1400000/predictionInfoService/predictionInfoList` |
@@ -51,6 +53,17 @@ Notes:
   `https://api.data.go.kr/openapi/tn_pubr_public_rcrfrst_api`, the official
   `serviceKey` parameter, and `type=json`. The detail page may redirect through
   the data.go.kr login/application flow.
+- `client.travel.mountain_weather()` returns `MountainWeather` typed observations.
+  The model exposes station identity, KST-aware observation time, 10 m/2 m
+  temperature-humidity-wind fields, pressure and rainfall fields, while raw
+  provider keys remain in `raw`.
+- `client.safety.wildfire_risk_forecast()`, `_sido()`, and `_sigungu()` use the
+  official `forestPointV2` endpoints and return `WildfireRiskForecast` typed
+  rows. `localAreas` and `upplocalcd` are passed only to the corresponding
+  regional endpoints.
+- `client.safety.landslide_forecast_issues()` returns
+  `LandslideForecastIssue` typed rows with issue kind, issuing institution,
+  status, and KST-aware first issue time.
 - `client.travel.recreation_forests()` combines the national recreation forest
   promotion, facility, reservation policy, and reservation file datasets into a
   high-level detail record with plain `address`, `latitude`, and `longitude`

@@ -145,7 +145,15 @@ async def test_legacy_xml_endpoint_sends_service_key_and_parses_page(fake_client
 
 async def test_data_go_json_endpoint_adds_type_and_parses_items(fake_client_factory):
     payload = public_payload(
-        [{"doname": "전국", "meanavg": "27"}, {"doname": "서울", "meanavg": "22"}],
+        [
+            {
+                "doname": "전국",
+                "meanavg": "27",
+                "analdate": "202608201200",
+                "regioncode": "00",
+            },
+            {"doname": "서울", "meanavg": "22", "analdate": "202608201200"},
+        ],
         total_count=2,
     )
     client, session = fake_client_factory(FakeResponse(payload))
@@ -153,13 +161,36 @@ async def test_data_go_json_endpoint_adds_type_and_parses_items(fake_client_fact
     page = await client.safety.wildfire_risk_forecast(exclude_forecast=True, num_of_rows=2)
 
     call = session.calls[0]
-    assert call["url"].endswith("/forestPoint/forestPointListGeongugSearch")
+    assert call["url"].endswith("/forestPointV2/forestPointListGeongugSearchV2")
     assert call["params"]["_type"] == "json"
     assert call["params"]["excludeForecast"] == 1
-    assert page.items[0]["doname"] == "전국"
-    assert page.items[1]["meanavg"] == "22"
+    assert page.items[0].region_name == "전국"
+    assert page.items[1].mean_average == 22.0
+    assert page.items[0].analysis_at is not None
+    assert page.items[0].analysis_at.utcoffset() is not None
     assert page.context.provider == "data.go.kr"
     assert "ServiceKey" not in page.context.request_params
+
+
+async def test_wildfire_risk_sido_and_sigungu_use_v2_filters(fake_client_factory):
+    payload = public_payload({"doname": "강원특별자치도", "meanavg": "18"})
+    client, session = fake_client_factory(FakeResponse(payload), FakeResponse(payload))
+
+    sido = await client.safety.wildfire_risk_forecast_sido(
+        local_areas="42", num_of_rows=1
+    )
+    sigungu = await client.safety.wildfire_risk_forecast_sigungu(
+        local_areas="42", upper_local_code="42000", num_of_rows=1
+    )
+
+    assert sido.items[0].scope == "sido"
+    assert session.calls[0]["url"].endswith("/forestPointV2/forestPointListSidoSearchV2")
+    assert session.calls[0]["params"]["localAreas"] == "42"
+    assert sigungu.items[0].scope == "sigungu"
+    assert session.calls[1]["url"].endswith(
+        "/forestPointV2/forestPointListSigunguSearchV2"
+    )
+    assert session.calls[1]["params"]["upplocalcd"] == "42000"
 
 
 async def test_standard_recreation_forests_uses_type_param_and_models(fake_client_factory):
@@ -236,7 +267,28 @@ async def test_client_catalog_returns_human_readable_entries(fake_client_factory
 
 async def test_mountain_weather_returns_place_coordinate(fake_client_factory):
     payload = public_payload(
-        {"stationName": "관악산", "xValue": "126.9636", "yValue": "37.4450"},
+        {
+            "obsid": "OBS-01",
+            "obsname": "관악산",
+            "localarea": "서울",
+            "tm": "202608201200",
+            "tm10m": "25.1",
+            "tm2m": "24.3",
+            "hm10m": "70",
+            "hm2m": "75",
+            "pa": "1001.2",
+            "rn": "0.2",
+            "cprn": "0.1",
+            "ts": "23.4",
+            "wd10m": "180",
+            "wd10mstr": "남",
+            "wd2m": "170",
+            "wd2mstr": "남남동",
+            "ws10m": "2.1",
+            "ws2m": "1.4",
+            "xValue": "126.9636",
+            "yValue": "37.4450",
+        },
         total_count=1,
     )
     client, _session = fake_client_factory(FakeResponse(payload))
@@ -245,7 +297,33 @@ async def test_mountain_weather_returns_place_coordinate(fake_client_factory):
 
     assert page.items[0].latitude == 37.445
     assert page.items[0].longitude == 126.9636
-    assert page.items[0].raw["stationName"] == "관악산"
+    assert page.items[0].obs_id == "OBS-01"
+    assert page.items[0].temperature_2m == 24.3
+    assert page.items[0].observed_at is not None
+    assert page.items[0].observed_at.utcoffset() is not None
+    assert page.items[0].raw["obsname"] == "관악산"
+
+
+async def test_landslide_forecast_issues_are_typed(fake_client_factory):
+    payload = public_payload(
+        {
+            "frcstIssuKindCd": "1",
+            "frcstIssuKindNm": "산사태주의보",
+            "ocrnFrcstIssuInsttNm": "산림청",
+            "frcstIssuStts": "발령",
+            "frstFrcstIssuDt": "2026-08-20 12:00:00",
+        }
+    )
+    client, session = fake_client_factory(FakeResponse(payload))
+
+    page = await client.safety.landslide_forecast_issues(num_of_rows=1)
+
+    assert session.calls[0]["url"].endswith("/forecastIssueService/forecastIssueList")
+    assert session.calls[0]["params"]["_type"] == "json"
+    assert page.items[0].issue_kind_name == "산사태주의보"
+    assert page.items[0].issuing_institution == "산림청"
+    assert page.items[0].issued_at is not None
+    assert page.items[0].issued_at.utcoffset() is not None
 
 
 async def test_mountain_weather_missing_coordinate_is_none(fake_client_factory):
