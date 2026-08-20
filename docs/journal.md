@@ -2,6 +2,38 @@
 
 역시간순(최근 작업이 위로)으로 작업 사항을 기록합니다. 작업이 완료되면 이 문서에 기록을 추가하세요.
 
+## [2026-08-20] C05B~C05D 리뷰 반영 및 경계 보안 보강
+- **작업자**: Codex
+- **내용**:
+  - `WildfireScope` Literal을 도입해 `mypy --strict` typed parser 오류를 제거했다.
+  - V2 시군구 응답에서 `sigucode`/`sigun`을 우선해 지역 identity가 상위 시도 코드로
+    잘못 잡히지 않게 했다.
+  - Name-only SHP layer의 source ID hash에 geometry를 포함해 서로 다른 route가
+    first-wins dedup으로 합쳐지지 않게 했다.
+  - JSON/XML body-level 인증 오류의 메시지와 구조화 response에서 service key를
+    재귀 redaction했다.
+- **검증**: `pytest -q` 42 passed / live 11 skipped, `ruff check src tests`,
+  `mypy --strict src/krforest` 통과.
+
+## [2026-08-20] C05A 중첩 SHP 등산로 파서·source natural key 보강
+- **작업자**: Codex
+- **내용**:
+  - `PBD0000041`의 지역별 중첩 ZIP 안 canonical SHP를 재귀 파싱하고, 동일 노선의
+    `_geojson.zip`·`_gpx.zip` 형제 사본은 건너뛰도록 했다.
+  - `ForestSpatialFeature.source_id`를 추가해 `PMNTN_SN`·`Name` 등 원천 식별자를
+    `source_file`과 결합하고, 식별자가 없을 때만 raw/geometry SHA-1을 사용한다.
+  - 산 이름·구간 이름을 결합한 표시명과 WGS84 route geometry를 보존한다.
+  - CRS transformer 캐시로 수천 개 SHP layer의 반복 초기화 비용을 제거했다.
+  - 실측 저메모리 census: 265,601,808 bytes / nested SHP ZIP 2,932개 / 원천 피처
+    164,185개 / LineString 56,869개 / MultiLineString 191개. 동일 필드·geometry의
+    완전 중복 3건은 parser에서 first-wins 제거한다.
+  - route-only live parse는 Point를 제외하고 57,060개(LineString 56,869 /
+    MultiLineString 191)를 반환했으며, 이름·geometry·source_id와 source_id 유일성을
+    모두 확인했다.
+- **검증**: 중첩 SHP 단위 테스트 2 passed, `ruff check .` 통과. 서비스키가 없는
+  환경에서는 data.go.kr live API 테스트를 실행하지 않았고, 산림 파일 census는
+  forest.go.kr에서 별도 완료했다.
+
 ## [2026-06-07] 로컬 저장 시 rustfs 동시 저장 및 전용 함수 추가
 - **작업자**: Antigravity (AI Agent)
 - **내용**:

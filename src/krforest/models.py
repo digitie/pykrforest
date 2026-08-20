@@ -119,10 +119,63 @@ class CatalogEntry(ForestModel):
 
 
 class MountainWeather(ForestModel):
-    """산악기상 관측 지점과 기상 원본 레코드."""
+    """산악기상 관측 지점과 기상 원본 레코드.
 
+    원천 필드명(``hm10m``/``rn`` 등)은 ``raw``에 그대로 보존하고, map ETL이
+    사용할 의미 있는 이름과 단위를 함께 제공한다.
+    """
+
+    obs_id: str | None = None
+    obs_name: str | None = None
+    local_area: str | None = None
+    observed_at: datetime | None = None
+    temperature_10m: float | None = None
+    temperature_2m: float | None = None
+    humidity_10m: float | None = None
+    humidity_2m: float | None = None
+    pressure: float | None = None
+    rainfall_tipping: float | None = None
+    rainfall_weight: float | None = None
+    ground_temperature: float | None = None
+    wind_direction_10m: float | None = None
+    wind_direction_10m_name: str | None = None
+    wind_direction_2m: float | None = None
+    wind_direction_2m_name: str | None = None
+    wind_speed_10m: float | None = None
+    wind_speed_2m: float | None = None
     latitude: float | None = None
     longitude: float | None = None
+    raw: RawRecord = Field(repr=False)
+
+
+class WildfireRiskForecast(ForestModel):
+    """산불위험지수 V2의 전국·시도·시군구 통계 한 건."""
+
+    scope: Literal["national", "sido", "sigungu"]
+    analysis_at: datetime | None = None
+    area: str | None = None
+    region_code: str | None = None
+    region_name: str | None = None
+    upper_region_code: str | None = None
+    d1: float | None = None
+    d2: float | None = None
+    d3: float | None = None
+    d4: float | None = None
+    maximum: float | None = None
+    mean_average: float | None = None
+    minimum: float | None = None
+    standard_deviation: float | None = None
+    raw: RawRecord = Field(repr=False)
+
+
+class LandslideForecastIssue(ForestModel):
+    """산사태 예보발령·해제 이력 한 건."""
+
+    issue_kind_code: str | None = None
+    issue_kind_name: str | None = None
+    issuing_institution: str | None = None
+    status: str | None = None
+    issued_at: datetime | None = None
     raw: RawRecord = Field(repr=False)
 
 
@@ -196,6 +249,7 @@ class ForestSpatialFeature(ForestModel):
     dataset_name: str
     source_file: str | None = None
     layer_name: str | None = None
+    source_id: str | None = None
     name: str | None = None
     geometry_type: str | None = None
     geometry: RawRecord | None = Field(default=None, repr=False)

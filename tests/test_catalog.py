@@ -20,6 +20,8 @@ def test_catalog_has_travel_and_safety_api_endpoints():
     assert "national_recreation_forest_reservations" in keys
     assert "standard_recreation_forests" in keys
     assert "wildfire_stats" in keys
+    assert "wildfire_risk_forecast_sido" in keys
+    assert "wildfire_risk_forecast_sigungu" in keys
     assert "landslide_predictions" in keys
     assert {endpoint.provider for endpoint in API_ENDPOINTS} == {"forest.go.kr", "data.go.kr"}
 
@@ -44,6 +46,12 @@ def test_catalog_lookup_and_invalid_category():
     assert standard.data_go_id == "15013111"
     assert standard.service_key_param == "serviceKey"
     assert standard.response_type_param == "type"
+    mountain_weather = api_endpoint("mountain_weather")
+    assert mountain_weather.response_format == "json"
+    assert mountain_weather.response_type_param == "_type"
+    assert api_endpoint("wildfire_risk_forecast").operation == (
+        "forestPointListGeongugSearchV2"
+    )
     assert file_dataset("15112801").formats == ("CSV",)
     assert file_dataset("PBD0000041").provider == "forest.go.kr"
     assert file_dataset("PBD0000031").download_path == "/trail/dule.zip"

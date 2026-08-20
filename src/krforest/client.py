@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, TypeVar
@@ -38,18 +38,22 @@ from .models import (
     FileDataset,
     ForestSpatialFeature,
     ForestSpatialPoint,
+    LandslideForecastIssue,
     MountainWeather,
     Page,
     RawRecord,
     RecreationForest,
     RecreationForestReservation,
     StandardRecreationForest,
+    WildfireRiskForecast,
 )
 from .parser import (
     parse_erosion_control_dam,
+    parse_landslide_forecast_issue,
     parse_mountain_weather,
     parse_recreation_forest_reservation,
     parse_standard_recreation_forest,
+    parse_wildfire_risk_forecast,
 )
 from .processor import (
     RECREATION_FOREST_FACILITY_ID,
@@ -489,7 +493,11 @@ class TravelNamespace:
     ) -> tuple[ForestSpatialFeature, ...]:
         """산림청 등산로정보 ZIP을 공간 feature DTO로 반환한다."""
 
-        return await self._client.files.spatial_features("PBD0000041", name=name)
+        return await self._client.files.spatial_features(
+            "PBD0000041",
+            name=name,
+            geometry_types={"LineString", "MultiLineString"},
+        )
 
     async def dulle_trail_features(
         self,
@@ -498,7 +506,11 @@ class TravelNamespace:
     ) -> tuple[ForestSpatialFeature, ...]:
         """산림청 둘레길정보 ZIP을 공간 feature DTO로 반환한다."""
 
-        return await self._client.files.spatial_features("PBD0000031", name=name)
+        return await self._client.files.spatial_features(
+            "PBD0000031",
+            name=name,
+            geometry_types={"LineString", "MultiLineString"},
+        )
 
     async def forest_education_centers(
         self,
@@ -598,17 +610,60 @@ class SafetyNamespace:
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
-    ) -> Page[RawRecord]:
-        """전국 산불위험 예보지도 레코드를 조회한다."""
+    ) -> Page[WildfireRiskForecast]:
+        """V2 전국 산불위험 예보지수 레코드를 typed 모델로 조회한다."""
 
         query = dict(params)
         if exclude_forecast is not None:
             query["excludeForecast"] = int(bool(exclude_forecast))
-        return await self._client.raw_endpoint(
-            "wildfire_risk_forecast",
-            query,
-            page_no=page_no,
-            num_of_rows=num_of_rows,
+        return await self._client._page(
+            api_endpoint("wildfire_risk_forecast"),
+            _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            lambda row: parse_wildfire_risk_forecast(row, scope="national"),
+        )
+
+    async def wildfire_risk_forecast_sido(
+        self,
+        *,
+        local_areas: str | None = None,
+        exclude_forecast: bool | int | None = None,
+        page_no: int = 1,
+        num_of_rows: int = 10,
+        **params: Any,
+    ) -> Page[WildfireRiskForecast]:
+        """V2 시도별 산불위험 예보지수 레코드를 조회한다."""
+
+        query = dict(params)
+        query["localAreas"] = local_areas
+        if exclude_forecast is not None:
+            query["excludeForecast"] = int(bool(exclude_forecast))
+        return await self._client._page(
+            api_endpoint("wildfire_risk_forecast_sido"),
+            _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            lambda row: parse_wildfire_risk_forecast(row, scope="sido"),
+        )
+
+    async def wildfire_risk_forecast_sigungu(
+        self,
+        *,
+        local_areas: str | None = None,
+        upper_local_code: str | None = None,
+        exclude_forecast: bool | int | None = None,
+        page_no: int = 1,
+        num_of_rows: int = 10,
+        **params: Any,
+    ) -> Page[WildfireRiskForecast]:
+        """V2 시군구별 산불위험 예보지수 레코드를 조회한다."""
+
+        query = dict(params)
+        query["localAreas"] = local_areas
+        query["upplocalcd"] = upper_local_code
+        if exclude_forecast is not None:
+            query["excludeForecast"] = int(bool(exclude_forecast))
+        return await self._client._page(
+            api_endpoint("wildfire_risk_forecast_sigungu"),
+            _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            lambda row: parse_wildfire_risk_forecast(row, scope="sigungu"),
         )
 
     async def past_landslides(
@@ -649,14 +704,13 @@ class SafetyNamespace:
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
-    ) -> Page[RawRecord]:
-        """산사태 예보 발령 레코드를 조회한다."""
+    ) -> Page[LandslideForecastIssue]:
+        """산사태 예보 발령 레코드를 typed 모델로 조회한다."""
 
-        return await self._client.raw_endpoint(
-            "landslide_forecast_issues",
-            params,
-            page_no=page_no,
-            num_of_rows=num_of_rows,
+        return await self._client._page(
+            api_endpoint("landslide_forecast_issues"),
+            _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
+            parse_landslide_forecast_issue,
         )
 
     async def roadside_landslides(
@@ -774,11 +828,21 @@ class FileDataNamespace:
         data_go_id: str,
         *,
         name: str | None = None,
+        geometry_types: Collection[str] | None = None,
     ) -> tuple[ForestSpatialFeature, ...]:
-        """SHP/GeoJSON/GPX 파일데이터를 공간 feature DTO로 반환한다."""
+        """SHP/GeoJSON/GPX 파일데이터를 공간 feature DTO로 반환한다.
+
+        `geometry_types`를 주면 해당 geometry만 좌표 변환·DTO 생성한다. 대형
+        aggregate route archive에서 Point 레코드를 제외할 때 사용한다.
+        """
 
         dataset = file_dataset(data_go_id)
-        return forest_spatial_features(await self.download(data_go_id), dataset, name=name)
+        return forest_spatial_features(
+            await self.download(data_go_id),
+            dataset,
+            name=name,
+            geometry_types=geometry_types,
+        )
 
 
 def _page_params(

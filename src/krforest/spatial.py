@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import posixpath
 import xml.etree.ElementTree as ET
 import zipfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
+from functools import lru_cache
 from typing import Any
 
 from ._convert import extract_address, strip_or_none, to_float_or_none
@@ -15,7 +17,26 @@ from .exceptions import ForestParseError
 from .models import FileDataset, ForestSpatialFeature, ForestSpatialPoint
 from .parser import first_text
 
-_NAME_KEYS = ("name", "이름", "FOREST_NM", "RCAR_NM", "명칭", "시설명")
+_NAME_KEYS = (
+    "name",
+    "이름",
+    "FOREST_NM",
+    "RCAR_NM",
+    "MNTN_NM",
+    "PMNTN_NM",
+    "명칭",
+    "시설명",
+)
+_SOURCE_ID_KEYS = (
+    "PMNTN_SN",
+    "PAST_SPOT_",
+    "OBJECTID",
+    "FID",
+    "Name",
+    "name",
+    "ID",
+    "id",
+)
 _ADDRESS_KEYS = (
     "address",
     "주소",
@@ -99,22 +120,32 @@ def forest_spatial_features(
     dataset: FileDataset,
     *,
     name: str | None = None,
+    geometry_types: Collection[str] | None = None,
 ) -> tuple[ForestSpatialFeature, ...]:
     """SHP/GeoJSON/GPX ZIP bytes를 지도 앱에서 쓰기 쉬운 피처 tuple로 변환한다."""
 
     archive = _open_archive(data)
     name_filter = strip_or_none(name)
+    geometry_type_filter = frozenset(geometry_types) if geometry_types is not None else None
     features: list[ForestSpatialFeature] = []
+    seen_source_ids: set[str] = set()
 
     for reader, prj_text, source_file, layer_name in _open_readers_from_archive(archive):
         transformer = _coordinate_transformer(prj_text)
         for shape_record in reader.iterShapeRecords():
             raw = _clean_record(shape_record.record.as_dict())
-            feature_name = first_text(raw, *_NAME_KEYS)
+            feature_name = _feature_name(raw)
             if name_filter is not None and name_filter not in (feature_name or ""):
                 continue
 
+            shape_geometry_type = _shape_geometry_type(shape_record.shape)
+            if geometry_type_filter is not None and shape_geometry_type not in geometry_type_filter:
+                continue
             geometry = _shape_geometry(shape_record.shape, transformer)
+            source_id = _feature_source_id(raw, source_file, geometry)
+            if source_id in seen_source_ids:
+                continue
+            seen_source_ids.add(source_id)
             latitude, longitude = _shape_centroid(shape_record.shape, transformer)
             features.append(
                 ForestSpatialFeature(
@@ -122,8 +153,9 @@ def forest_spatial_features(
                     dataset_name=dataset.title,
                     source_file=source_file,
                     layer_name=layer_name,
+                    source_id=source_id,
                     name=feature_name,
-                    geometry_type=_geometry_type(geometry),
+                    geometry_type=shape_geometry_type or _geometry_type(geometry),
                     geometry=geometry,
                     bbox=_shape_bbox(shape_record.shape, transformer),
                     latitude=latitude,
@@ -135,12 +167,19 @@ def forest_spatial_features(
     for source_file, payload in _geojson_members(archive):
         for feature in _geojson_features(payload):
             raw = _clean_record(feature.get("properties", {}))
-            feature_name = first_text(raw, *_NAME_KEYS) or strip_or_none(feature.get("name"))
+            feature_name = _feature_name(raw) or strip_or_none(feature.get("name"))
             if name_filter is not None and name_filter not in (feature_name or ""):
                 continue
             geometry = feature.get("geometry")
             if not isinstance(geometry, Mapping):
                 geometry = None
+            geometry_type = _geometry_type(geometry)
+            if geometry_type_filter is not None and geometry_type not in geometry_type_filter:
+                continue
+            source_id = _feature_source_id(raw, source_file, geometry)
+            if source_id in seen_source_ids:
+                continue
+            seen_source_ids.add(source_id)
             latitude, longitude = _geometry_centroid(geometry)
             features.append(
                 ForestSpatialFeature(
@@ -148,8 +187,9 @@ def forest_spatial_features(
                     dataset_name=dataset.title,
                     source_file=source_file,
                     layer_name=_layer_name(source_file),
+                    source_id=source_id,
                     name=feature_name,
-                    geometry_type=_geometry_type(geometry),
+                    geometry_type=geometry_type,
                     geometry=dict(geometry) if geometry is not None else None,
                     bbox=_geometry_bbox(geometry),
                     latitude=latitude,
@@ -160,12 +200,19 @@ def forest_spatial_features(
 
     for source_file, feature in _gpx_features(archive):
         raw = _clean_record(feature.get("properties", {}))
-        feature_name = first_text(raw, *_NAME_KEYS) or strip_or_none(feature.get("name"))
+        feature_name = _feature_name(raw) or strip_or_none(feature.get("name"))
         if name_filter is not None and name_filter not in (feature_name or ""):
             continue
         geometry = feature.get("geometry")
         if not isinstance(geometry, Mapping):
             geometry = None
+        geometry_type = _geometry_type(geometry)
+        if geometry_type_filter is not None and geometry_type not in geometry_type_filter:
+            continue
+        source_id = _feature_source_id(raw, source_file, geometry)
+        if source_id in seen_source_ids:
+            continue
+        seen_source_ids.add(source_id)
         latitude, longitude = _geometry_centroid(geometry)
         features.append(
             ForestSpatialFeature(
@@ -173,8 +220,9 @@ def forest_spatial_features(
                 dataset_name=dataset.title,
                 source_file=source_file,
                 layer_name=_layer_name(source_file),
+                source_id=source_id,
                 name=feature_name,
-                geometry_type=_geometry_type(geometry),
+                geometry_type=geometry_type,
                 geometry=dict(geometry) if geometry is not None else None,
                 bbox=_geometry_bbox(geometry),
                 latitude=latitude,
@@ -228,6 +276,8 @@ def _open_archive(data: bytes) -> zipfile.ZipFile:
 
 def _open_readers_from_archive(
     archive: zipfile.ZipFile,
+    *,
+    prefix: str = "",
 ) -> tuple[tuple[Any, str | None, str, str], ...]:
     try:
         import shapefile  # type: ignore[import-untyped]
@@ -262,9 +312,93 @@ def _open_readers_from_archive(
             encoding="cp949",
             encodingErrors="replace",
         )
-        source_file = _zip_name_from_member(archive, shp_name)
+        source_file = _join_archive_path(prefix, _zip_name_from_member(archive, shp_name))
         readers.append((reader, prj_text, source_file, _layer_name(source_file)))
+
+    # PBD0000041 is an aggregate ZIP whose actual SHP files live in one ZIP per
+    # administrative area.  The *_geojson.zip and *_gpx.zip siblings contain the
+    # same routes in alternate formats; selecting the SHP sibling avoids emitting
+    # three copies of every feature while keeping direct GeoJSON/GPX archives
+    # supported below in ``forest_spatial_features``.
+    for info in archive.infolist():
+        if info.is_dir() or not info.filename.lower().endswith(".zip"):
+            continue
+        nested_name = _zip_member_display_name(info)
+        nested_stem = posixpath.splitext(posixpath.basename(nested_name))[0].lower()
+        if nested_stem.endswith(("_geojson", "_gpx")):
+            continue
+        try:
+            nested = zipfile.ZipFile(io.BytesIO(archive.read(info.filename)))
+        except zipfile.BadZipFile:
+            continue
+        try:
+            readers.extend(
+                _open_readers_from_archive(
+                    nested,
+                    prefix=_join_archive_path(prefix, nested_name),
+                )
+            )
+        finally:
+            nested.close()
     return tuple(readers)
+
+
+def _feature_name(raw: Mapping[str, Any]) -> str | None:
+    """산행로 DBF의 산 이름·구간 이름을 표시용 이름으로 결합한다."""
+
+    mountain_name = first_text(raw, "MNTN_NM")
+    segment_name = first_text(raw, "PMNTN_NM")
+    if mountain_name is not None and segment_name is not None:
+        if mountain_name == segment_name:
+            return mountain_name
+        return f"{mountain_name} {segment_name}"
+    return first_text(raw, *_NAME_KEYS)
+
+
+def _feature_source_id(
+    raw: Mapping[str, Any],
+    source_file: str,
+    geometry: Mapping[str, Any] | None,
+) -> str:
+    """파일 피처의 재실행 가능한 source natural key를 만든다."""
+
+    stable_fields = {
+        key: value
+        for key in _SOURCE_ID_KEYS
+        if (value := first_text(raw, key)) is not None
+    }
+    if stable_fields:
+        identity_payload: dict[str, Any] = {
+            "fields": stable_fields,
+            "source_file": source_file,
+        }
+        # Name-only DBF layers do not expose a row identity.  Including the
+        # canonical geometry prevents first-wins dedup from merging distinct
+        # segments that happen to share a display name.
+        if set(key.lower() for key in stable_fields) <= {"name"}:
+            identity_payload["geometry"] = geometry
+        canonical = json.dumps(
+            identity_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        digest = hashlib.sha1(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()
+        return f"{source_file}:keys:{digest}"
+
+    canonical = json.dumps(
+        {"geometry": geometry, "raw": dict(raw)},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    digest = hashlib.sha1(canonical.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return f"{source_file}:sha1:{digest}"
+
+
+def _join_archive_path(prefix: str, name: str) -> str:
+    return posixpath.join(prefix, name) if prefix else name
 
 
 def _clean_record(record: Mapping[str, Any]) -> dict[str, Any]:
@@ -299,6 +433,7 @@ def _record_point(raw: Mapping[str, Any], shape: Any) -> tuple[float | None, flo
     return None, None
 
 
+@lru_cache(maxsize=32)
 def _coordinate_transformer(prj_text: str | None) -> Any:
     try:
         from pyproj import CRS, Transformer
@@ -339,6 +474,11 @@ def _shape_geometry(shape: Any, transformer: Any) -> dict[str, Any] | None:
         "type": geometry.get("type"),
         "coordinates": _transform_coordinates(coordinates, transformer),
     }
+
+
+def _shape_geometry_type(shape: Any) -> str | None:
+    geometry = getattr(shape, "__geo_interface__", None)
+    return geometry.get("type") if isinstance(geometry, Mapping) else None
 
 
 def _shape_bbox(shape: Any, transformer: Any) -> tuple[float, float, float, float] | None:

@@ -164,6 +164,7 @@ class ForestHttp:
             payload,
             provider=provider,
             endpoint=endpoint,
+            api_key=self.api_key,
             context=safe_context,
         )
 
@@ -258,6 +259,7 @@ def _normalize_payload(
     *,
     provider: str,
     endpoint: str,
+    api_key: str,
     context: CallContext,
 ) -> NormalizedPayload:
     if "OpenAPI_ServiceResponse" in payload:
@@ -265,6 +267,7 @@ def _normalize_payload(
             payload["OpenAPI_ServiceResponse"],
             provider=provider,
             endpoint=endpoint,
+            api_key=api_key,
         )
 
     try:
@@ -302,7 +305,14 @@ def _normalize_payload(
                 header=header,
                 context=context,
             )
-        _raise_result_code(code, message, provider=provider, endpoint=endpoint, payload=payload)
+        _raise_result_code(
+            code,
+            message,
+            provider=provider,
+            endpoint=endpoint,
+            payload=payload,
+            api_key=api_key,
+        )
 
     try:
         items = normalize_items(body.get("items", []))
@@ -359,13 +369,15 @@ def _raise_result_code(
     provider: str,
     endpoint: str,
     payload: dict[str, Any],
+    api_key: str,
 ) -> None:
     text = f"{provider} returned {code}: {message}" if code else message
+    text = redact_secret(text, api_key)
     kwargs: dict[str, Any] = {
         "provider": provider,
         "endpoint": endpoint,
         "result_code": code or None,
-        "response": payload,
+        "response": _redact_payload(payload, api_key),
     }
     upper = text.upper()
     if code in {"20", "30", "31", "32", "33"} or "SERVICE_KEY" in upper or "AUTH" in upper:
@@ -379,7 +391,13 @@ def _raise_result_code(
     raise ForestRequestError(text, failure_kind="request", **kwargs)
 
 
-def _raise_openapi_service_error(data: Any, *, provider: str, endpoint: str) -> None:
+def _raise_openapi_service_error(
+    data: Any,
+    *,
+    provider: str,
+    endpoint: str,
+    api_key: str,
+) -> None:
     if not isinstance(data, dict):
         raise ForestParseError(
             "OpenAPI_ServiceResponse must be an object",
@@ -404,4 +422,23 @@ def _raise_openapi_service_error(data: Any, *, provider: str, endpoint: str) -> 
         or header.get("resultMsg")
         or json.dumps(header, ensure_ascii=False)
     )
-    _raise_result_code(code, message, provider=provider, endpoint=endpoint, payload=data)
+    _raise_result_code(
+        code,
+        message,
+        provider=provider,
+        endpoint=endpoint,
+        payload=data,
+        api_key=api_key,
+    )
+
+
+def _redact_payload(value: Any, api_key: str) -> Any:
+    """body-level provider error payload에서 service key를 재귀적으로 제거한다."""
+
+    if isinstance(value, str):
+        return redact_secret(value, api_key)
+    if isinstance(value, dict):
+        return {key: _redact_payload(item, api_key) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_payload(item, api_key) for item in value]
+    return value

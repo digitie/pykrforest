@@ -28,7 +28,9 @@ outdoor recreation, wildfire, landslide, and forest safety data.
 | `mountain_weather` | travel, safety | data.go.kr | 15084696 | `1400377/mtweather/mountListSearch` |
 | `national_recreation_forest_reservations` | travel | data.go.kr | 15134227 | `1400000/nationalRecreationForestReservationService/nationalRecreationForestReservationList` |
 | `standard_recreation_forests` | travel | data.go.kr | 15013111 | `openapi/tn_pubr_public_rcrfrst_api` |
-| `wildfire_risk_forecast` | safety | data.go.kr | 15084817 | `1400377/forestPoint/forestPointListGeongugSearch` |
+| `wildfire_risk_forecast` | safety | data.go.kr | 15084817 | `1400377/forestPointV2/forestPointListGeongugSearchV2` |
+| `wildfire_risk_forecast_sido` | safety | data.go.kr | 15084817 | `1400377/forestPointV2/forestPointListSidoSearchV2` |
+| `wildfire_risk_forecast_sigungu` | safety | data.go.kr | 15084817 | `1400377/forestPointV2/forestPointListSigunguSearchV2` |
 | `wildfire_stats` | safety | data.go.kr | 3070842 | `1400000/forestStusService/getfirestatsservice` |
 | `past_landslides` | safety | data.go.kr | 15074816 | `1400000/pastLndslInfoService/pastLndslInfoList` |
 | `landslide_predictions` | safety | data.go.kr | 15074800 | `1400000/predictionInfoService/predictionInfoList` |
@@ -51,6 +53,17 @@ Notes:
   `https://api.data.go.kr/openapi/tn_pubr_public_rcrfrst_api`, the official
   `serviceKey` parameter, and `type=json`. The detail page may redirect through
   the data.go.kr login/application flow.
+- `client.travel.mountain_weather()` returns `MountainWeather` typed observations.
+  The model exposes station identity, KST-aware observation time, 10 m/2 m
+  temperature-humidity-wind fields, pressure and rainfall fields, while raw
+  provider keys remain in `raw`.
+- `client.safety.wildfire_risk_forecast()`, `_sido()`, and `_sigungu()` use the
+  official `forestPointV2` endpoints and return `WildfireRiskForecast` typed
+  rows. `localAreas` and `upplocalcd` are passed only to the corresponding
+  regional endpoints.
+- `client.safety.landslide_forecast_issues()` returns
+  `LandslideForecastIssue` typed rows with issue kind, issuing institution,
+  status, and KST-aware first issue time.
 - `client.travel.recreation_forests()` combines the national recreation forest
   promotion, facility, reservation policy, and reservation file datasets into a
   high-level detail record with plain `address`, `latitude`, and `longitude`
@@ -66,6 +79,14 @@ Notes:
 - `client.travel.forest_trail_file_features()` and
   `client.travel.dulle_trail_features()` download the forest.go.kr aggregate ZIP
   files and return `ForestSpatialFeature` records with WGS84 geometry metadata.
+  `PBD0000041` is an aggregate archive: the canonical SHP layers are nested in
+  one ZIP per region, while sibling `_geojson.zip`/`_gpx.zip` archives contain
+  alternate copies and are not emitted a second time. Each emitted record has
+  a non-null, reproducible opaque `source_id` scoped to the dataset. The key is
+  a fingerprint of the source file and all available stable source fields
+  (`PMNTN_SN`, `Name`, `ID`, and similar); geometry is used only when no source
+  identity exists. Exact duplicate rows are first-wins deduplicated. The route
+  name combines `MNTN_NM` and `PMNTN_NM` when both are available.
 - `client.safety.landslide_risk_map_files()` downloads the forest.go.kr
   산사태위험지도 ZIP and returns a filename-keyed `dict[str, bytes]` because the
   dataset is raster TIF/XML/PDF rather than record-shaped vector data.
@@ -108,6 +129,15 @@ Notes:
 | 15144785 | safety | CSV | 산불소화시설 |
 | 15144788 | safety | CSV | 진화대원대기장소 |
 | 15144784 | safety | CSV | 담수용사방댐 |
+
+## 공간 피처 정규화 규칙
+
+`ForestSpatialFeature`는 원천 파일의 `source_file`, `layer_name`, `source_id`,
+`geometry_type`, GeoJSON 형태의 `geometry`, WGS84 `bbox`·중심 좌표와 정제되지 않은
+`raw` 필드를 함께 보존한다. 지도 소비자는 `LineString`과 `MultiLineString`만 경로로
+승격해야 하며, `Point`·다각형·빈 도형은 경로로 추정하지 않는다. 산림청 파일은 노선의
+폐쇄·통행 가능 여부를 실시간으로 보장하지 않으므로 이 모델에 운영 상태를 만들어내지
+않는다.
 
 ## Exclusions
 

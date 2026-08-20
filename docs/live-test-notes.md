@@ -30,3 +30,10 @@ pytest -m live
 
 - `ForestClient.from_env()`와 live test는 이제 `DATA_GO_KR_SERVICE_KEY`만 읽는다.
 - `KRFOREST_SERVICE_KEY`, `KFS_SERVICE_KEY`, `FOREST_SERVICE_KEY`, `DATA_GO_SERVICE_KEY`, `TRIPMATE_DATA_GO_SERVICE_KEY` 같은 legacy fallback name은 더 이상 지원하지 않는다.
+
+## 2026-08-20 C05B~C05D live gate
+
+- typed 산악기상·산불위험 V2·산사태 예보발령 live test를 추가했다.
+- 현재 worktree에는 `DATA_GO_KR_SERVICE_KEY`가 없어 live 11건이 skip되었다.
+- key가 설정된 환경에서는 승인되지 않은 API가 HTTP/body-level 인증 오류를 내더라도
+  예외 메시지와 response에 key가 남지 않는지 함께 확인한다.
