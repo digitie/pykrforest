@@ -2,6 +2,21 @@
 
 역시간순(최근 작업이 위로)으로 작업 사항을 기록합니다. 작업이 완료되면 이 문서에 기록을 추가하세요.
 
+## [2026-08-20] C05A 중첩 SHP 등산로 파서·source natural key 보강
+- **작업자**: Codex
+- **내용**:
+  - `PBD0000041`의 지역별 중첩 ZIP 안 canonical SHP를 재귀 파싱하고, 동일 노선의
+    `_geojson.zip`·`_gpx.zip` 형제 사본은 건너뛰도록 했다.
+  - `ForestSpatialFeature.source_id`를 추가해 `PMNTN_SN`·`Name` 등 원천 식별자를
+    `source_file`과 결합하고, 식별자가 없을 때만 raw/geometry SHA-1을 사용한다.
+  - 산 이름·구간 이름을 결합한 표시명과 WGS84 route geometry를 보존한다.
+  - CRS transformer 캐시로 수천 개 SHP layer의 반복 초기화 비용을 제거했다.
+  - 실측 저메모리 census: 265,601,808 bytes / nested SHP ZIP 2,932개 / 피처
+    164,185개 / LineString 56,869개 / MultiLineString 191개 / source-id 중복 3개.
+- **검증**: 중첩 SHP 단위 테스트 2 passed, `ruff check .` 통과. 서비스키가 없는
+  환경에서는 data.go.kr live API 테스트를 실행하지 않았고, 산림 파일 census는
+  forest.go.kr에서 별도 완료했다.
+
 ## [2026-06-07] 로컬 저장 시 rustfs 동시 저장 및 전용 함수 추가
 - **작업자**: Antigravity (AI Agent)
 - **내용**:

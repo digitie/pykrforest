@@ -2,6 +2,29 @@
 
 현재 `python-krforest-api` 프로젝트의 진척도와 이어서 할 작업을 기록합니다. 새 세션이나 작업 재개 시 이 문서를 가장 먼저 확인하세요.
 
+## 현재 진척도 (2026-08-20)
+
+- `T-VN-C05A`의 forest.go.kr `PBD0000041` 통합 ZIP을 구현 계약에 맞게 보강함.
+  지역별 중첩 ZIP의 canonical SHP를 재귀적으로 읽고 `_geojson.zip`·`_gpx.zip` 형제
+  사본은 중복 방지를 위해 건너뛴다.
+- `ForestSpatialFeature.source_id`를 추가하고, 산행로는 `PMNTN_SN`, 둘레길은 원천
+  세그먼트 식별자를 우선 사용한다. 산 이름과 구간 이름(`MNTN_NM`·`PMNTN_NM`)도
+  표시명으로 결합한다.
+- 실측 census(2026-08-20): PBD0000041 265,601,808 bytes, 중첩 SHP ZIP 2,932개,
+  전체 피처 164,185개(Point 107,125 / LineString 56,869 / MultiLineString 191),
+  `source_id` 고유값 164,182개. 지도 경로 승격 대상은 LineString/MultiLineString이다.
+- 반복적인 CRS 생성 비용을 줄이기 위해 `_coordinate_transformer`를 캐시한다. 저메모리
+  census는 완료했으며, 전체 DTO materialization은 지도 ETL에서 필요한 geometry gate와
+  중복 제거를 먼저 확정한 뒤 별도 live 검증한다.
+- 중첩 SHP 회귀 테스트와 `ruff check .`가 통과했다. 둘레길 source-id live test는
+  서비스키가 있는 환경에서 실행한다.
+
+## 다음 해야 할 작업 (Next Task)
+
+- [ ] 전문 리뷰어 2명의 독립적 적대적 리뷰를 반영한 뒤 PR 생성·CI·머지.
+- [ ] `kor-travel-map`에서 C05A route 변환과 월 1회 schedule을 구현.
+- [ ] C05B~C05D typed API와 하루 6회 schedule을 순차 구현.
+
 ## 현재 진척도 (2026-06-07)
 
 - `src/krforest/debug.py`의 `save_fixture`에서 파일을 저장할 때 로컬 저장과 함께 `rustfs`에도 저장할 수 있도록 코드를 개선함.

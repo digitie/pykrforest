@@ -72,6 +72,18 @@ def line_shp_zip(tmp_path) -> bytes:
     return archive_path.read_bytes()
 
 
+def nested_line_shp_zip(tmp_path) -> bytes:
+    import zipfile
+
+    inner = line_shp_zip(tmp_path)
+    archive_path = tmp_path / "mountain.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("mountain/123456789.zip", inner)
+        archive.writestr("mountain/123456789_geojson.zip", b"not parsed")
+        archive.writestr("mountain/123456789_gpx.zip", b"not parsed")
+    return archive_path.read_bytes()
+
+
 def binary_zip(tmp_path) -> bytes:
     import zipfile
 
@@ -499,6 +511,27 @@ async def test_dulle_trail_features_parse_line_shp(fake_client_factory, tmp_path
     assert feature.longitude is not None
     assert 126.0 < feature.longitude < 128.0
     assert 37.0 < feature.latitude < 38.0
+
+
+async def test_forest_trail_features_parse_nested_shp_archive(
+    fake_client_factory,
+    tmp_path,
+):
+    archive = nested_line_shp_zip(tmp_path)
+    client, _session = fake_client_factory(
+        FakeResponse(text="<html>popup</html>"),
+        FakeResponse(status_code=302, text="moved"),
+        FakeResponse(content=archive),
+    )
+
+    features = await client.travel.forest_trail_file_features(name="지리산")
+
+    assert len(features) == 1
+    feature = features[0]
+    assert feature.dataset_id == "PBD0000041"
+    assert feature.geometry_type == "LineString"
+    assert feature.source_id is not None
+    assert feature.source_id.endswith(":Name:지리산둘레길 테스트")
 
 
 async def test_file_download_url_missing_content_url_raises(fake_client_factory):

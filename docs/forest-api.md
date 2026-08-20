@@ -66,6 +66,12 @@ Notes:
 - `client.travel.forest_trail_file_features()` and
   `client.travel.dulle_trail_features()` download the forest.go.kr aggregate ZIP
   files and return `ForestSpatialFeature` records with WGS84 geometry metadata.
+  `PBD0000041` is an aggregate archive: the canonical SHP layers are nested in
+  one ZIP per region, while sibling `_geojson.zip`/`_gpx.zip` archives contain
+  alternate copies and are not emitted a second time. Each record has a
+  reproducible `source_id`; mountain records use `PMNTN_SN` when present and
+  둘레길 records use the source segment identifier. The route name combines
+  `MNTN_NM` and `PMNTN_NM` when both are available.
 - `client.safety.landslide_risk_map_files()` downloads the forest.go.kr
   산사태위험지도 ZIP and returns a filename-keyed `dict[str, bytes]` because the
   dataset is raster TIF/XML/PDF rather than record-shaped vector data.
@@ -108,6 +114,15 @@ Notes:
 | 15144785 | safety | CSV | 산불소화시설 |
 | 15144788 | safety | CSV | 진화대원대기장소 |
 | 15144784 | safety | CSV | 담수용사방댐 |
+
+## 공간 피처 정규화 규칙
+
+`ForestSpatialFeature`는 원천 파일의 `source_file`, `layer_name`, `source_id`,
+`geometry_type`, GeoJSON 형태의 `geometry`, WGS84 `bbox`·중심 좌표와 정제되지 않은
+`raw` 필드를 함께 보존한다. 지도 소비자는 `LineString`과 `MultiLineString`만 경로로
+승격해야 하며, `Point`·다각형·빈 도형은 경로로 추정하지 않는다. 산림청 파일은 노선의
+폐쇄·통행 가능 여부를 실시간으로 보장하지 않으므로 이 모델에 운영 상태를 만들어내지
+않는다.
 
 ## Exclusions
 

@@ -196,6 +196,7 @@ class ForestSpatialFeature(ForestModel):
     dataset_name: str
     source_file: str | None = None
     layer_name: str | None = None
+    source_id: str | None = None
     name: str | None = None
     geometry_type: str | None = None
     geometry: RawRecord | None = Field(default=None, repr=False)

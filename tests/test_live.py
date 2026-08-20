@@ -115,6 +115,22 @@ async def test_live_forest_education_centers_download_and_parse():
     assert records[0].longitude is not None
 
 
+async def test_live_dulle_trail_features_are_line_features_with_source_ids():
+    key = _service_key()
+    client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
+
+    features = await client.travel.dulle_trail_features()
+
+    line_features = [
+        feature
+        for feature in features
+        if feature.geometry_type in {"LineString", "MultiLineString"}
+    ]
+    assert line_features
+    assert all(feature.source_id for feature in line_features)
+    assert all(feature.geometry for feature in line_features)
+
+
 async def test_live_landslide_risk_map_archive_downloads_files():
     key = _service_key()
     client = ForestClient(api_key=key, timeout=LIVE_TIMEOUT)
