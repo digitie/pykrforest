@@ -275,7 +275,7 @@ def _open_archive(data: bytes) -> zipfile.ZipFile:
         ) from exc
 
 
-_MAX_ARCHIVE_DECOMPRESSED_BYTES = 200 * 1024 * 1024
+_MAX_ARCHIVE_DECOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 _MAX_NESTED_ZIP_DEPTH = 2
 _MAX_ZIP_COMPRESSION_RATIO = 100
 
