@@ -76,6 +76,8 @@ class ApiEndpoint(ForestModel):
     service_key_param: str = "ServiceKey"
     response_format: str | None = None
     response_type_param: str | None = None
+    required_params: tuple[str, ...] = ()
+    optional_params: tuple[str, ...] = ()
 
 
 class FileDataset(ForestModel):
@@ -116,6 +118,9 @@ class CatalogEntry(ForestModel):
     service_key_param: str | None = None
     response_format: str | None = None
     response_type_param: str | None = None
+    required_params: tuple[str, ...] = ()
+    optional_params: tuple[str, ...] = ()
+    notes: str | None = None
 
 
 class MountainWeather(ForestModel):

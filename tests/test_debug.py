@@ -63,14 +63,33 @@ async def test_debug_endpoint_returns_debug_run_without_service_key(fake_client_
     assert run.request["method"] == "GET"
     assert "ServiceKey" not in run.request["query"]
     assert "TEST_KEY" not in repr(data)
-    assert data["processed"]["items"][0]["doname"] == "전국"
+    assert data["processed"][0]["doname"] == "전국"
+    assert data["response"]["elapsed_ms"] >= 0
     assert data["catalog"]["dataset_name"] == "산림청 국립산림과학원_산불위험예보정보"
     assert data["catalog"]["display_name"] == data["catalog"]["dataset_name"]
     assert data["catalog"]["service_key_url"].endswith("/15084817/openapi.do")
     assert data["catalog"]["service_key_account_url"].endswith(
         "/iim/api/selectAPIAcountView.do"
     )
-    assert data["trace"][-1] == "success"
+    assert data["trace"][-1].startswith("success in")
+
+
+async def test_debug_endpoint_error_has_structured_traceback_and_provider_fields(
+    fake_client_factory,
+):
+    client, _session = fake_client_factory(FakeResponse(status_code=403, text="forbidden"))
+
+    run = await client.debug_endpoint("wildfire_stats", {}, num_of_rows=1)
+    data = jsonable(run)
+
+    assert run.error is not None
+    assert data["error"]["type"] == "ForestAuthError"
+    assert data["error"]["failure_kind"] == "auth"
+    assert data["error"]["status_code"] == 403
+    assert data["error"]["retryable"] is False
+    assert isinstance(data["error"]["traceback"], list) and data["error"]["traceback"]
+    assert "TEST_KEY" not in repr(data)
+    assert data["trace"][-1].startswith("failed after")
 
 
 async def test_redact_sensitive_and_slugify_are_recursive():

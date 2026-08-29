@@ -20,7 +20,7 @@ Korea Forest Service(산림청)와 `data.go.kr`이 공개하는 데이터를 여
 | 표면 | 진입점 | 설명 |
 |------|--------|------|
 | Python 라이브러리 | `from krforest import ForestClient` | async-only 여행/안전 API + 파일데이터 클라이언트 |
-| 디버그 UI (선택 설치) | `streamlit run debug_ui/app.py` | Streamlit 기반 요청/응답/fixture 확인 도구 (`pip install -e ".[debug-ui]"`) |
+| 디버그 UI (선택 설치) | `streamlit run examples/streamlit_debug_ui.py` | Streamlit 기반 요청/응답/fixture 확인 도구 (`pip install -e ".[debug-ui]"`) |
 
 ## 먼저 읽을 문서
 
@@ -166,7 +166,7 @@ Streamlit debug UI 실행:
 
 ```bash
 pip install -e ".[debug-ui]"
-streamlit run debug_ui/app.py
+streamlit run examples/streamlit_debug_ui.py
 ```
 
 ## 검증
@@ -202,7 +202,7 @@ Curated scope는 data.go.kr와 forest.go.kr 공개 페이지를 기준으로 확
 | `src/krforest/` | 클라이언트 라이브러리(client, config, `_http`, parser, processor, spatial, catalog, models, replay, debug, exceptions) |
 | `tests/` | 네트워크 없는 단위 테스트 + opt-in live 테스트(`-m live`) |
 | `tests/fixtures/` | `save_fixture`로 생성한 replay fixture |
-| `debug_ui/` | Streamlit 기반 디버그 UI (`pip install -e ".[debug-ui]"`) |
+| `examples/` | Streamlit 기반 디버그 UI (`pip install -e ".[debug-ui]"`) |
 | `docs/` | 에이전트/기여자 문서 (resume, tasks, decisions, journal, forest-api, debug-fixtures 등) |
 
 ## 문서와 기여 규칙

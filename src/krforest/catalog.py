@@ -29,6 +29,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         url="http://api.forest.go.kr/openapi/service/trailInfoService/getforestservice",
         detail_url=f"{DATA_GO_BASE}/15002725/openapi.do",
         description="둘레길 구간, 거리, 소요시간, GPX/SHP 파일 링크를 제공한다.",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="mountain_stories",
@@ -41,6 +43,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         url="http://api.forest.go.kr/openapi/service/trailInfoService/getforeststoryservice",
         detail_url=f"{DATA_GO_BASE}/15058682/openapi.do",
         description="국내 산의 높이, 위치, 상세 설명, 등산 관련 정보를 제공한다.",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="forest_spatial_trails",
@@ -53,6 +57,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         url="http://api.forest.go.kr/openapi/service/trailInfoService/getforestspatialdataservice",
         detail_url=f"{DATA_GO_BASE}/15002734/openapi.do",
         description="등산로 공간정보와 산림지도, 파일 링크를 제공한다.",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="baekdu_trails",
@@ -65,6 +71,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         url="http://api.forest.go.kr/openapi/service/trailInfoService/gettrailservice",
         detail_url=f"{DATA_GO_BASE}/15002731/openapi.do",
         description="백두대간 등산로 구간, 거리, 경유지, 위치 정보를 제공한다.",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="famous_mountain_trails",
@@ -78,6 +86,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         detail_url=f"{DATA_GO_BASE}/3071170/openapi.do",
         description="명산 등산로 검색 및 상세 정보를 제공한다.",
         notes="검색 조건 없이 호출하면 빈 응답이 올 수 있다.",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="mountain_weather",
@@ -93,6 +103,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         notes="일부 인증키는 별도 활용신청 전 HTTP 403을 반환할 수 있다.",
         response_format="json",
         response_type_param="_type",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="national_recreation_forest_reservations",
@@ -115,6 +127,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         ),
         service_key_param="serviceKey",
         response_format="xml",
+        required_params=(),
+        optional_params=("goodsNm", "startStngDt", "endStngDt"),
     ),
     ApiEndpoint(
         key="standard_recreation_forests",
@@ -134,6 +148,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         service_key_param="serviceKey",
         response_format="json",
         response_type_param="type",
+        required_params=(),
+        optional_params=("rcrfrstNm", "ctprvnNm", "rcrfrstType", "stayngPosblYn"),
     ),
     ApiEndpoint(
         key="wildfire_risk_forecast",
@@ -152,6 +168,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         notes="V2는 72시간 예보를 3시간 간격으로 제공하며 일부 인증키는 별도 활용신청이 필요하다.",
         response_format="json",
         response_type_param="_type",
+        required_params=(),
+        optional_params=("excludeForecast",),
     ),
     ApiEndpoint(
         key="wildfire_risk_forecast_sido",
@@ -170,6 +188,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         notes="localAreas 요청 파라미터로 시도 범위를 선택한다.",
         response_format="json",
         response_type_param="_type",
+        required_params=(),
+        optional_params=("localAreas", "excludeForecast"),
     ),
     ApiEndpoint(
         key="wildfire_risk_forecast_sigungu",
@@ -188,6 +208,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         notes="localAreas와 upplocalcd 요청 파라미터로 시군구 범위를 선택한다.",
         response_format="json",
         response_type_param="_type",
+        required_params=(),
+        optional_params=("localAreas", "upplocalcd", "excludeForecast"),
     ),
     ApiEndpoint(
         key="wildfire_stats",
@@ -201,6 +223,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         detail_url=f"{DATA_GO_BASE}/3070842/openapi.do",
         description="산불 발생 위치, 일자, 시간, 원인 등 통계 정보를 조회한다.",
         notes="tripmate 키 기준 2026-05-08에 HTTP 403이 확인되어 live test는 승인 상태를 구분한다.",
+        required_params=(),
+        optional_params=("searchStDt", "searchEdDt"),
     ),
     ApiEndpoint(
         key="past_landslides",
@@ -213,6 +237,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         url="http://apis.data.go.kr/1400000/pastLndslInfoService/pastLndslInfoList",
         detail_url=f"{DATA_GO_BASE}/15074816/openapi.do",
         description="산사태 재해연도, 재해명, 행정구역, 피해면적 기준 목록을 조회한다.",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="landslide_predictions",
@@ -225,6 +251,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         url="http://apis.data.go.kr/1400000/predictionInfoService/predictionInfoList",
         detail_url=f"{DATA_GO_BASE}/15074800/openapi.do",
         description="시도·시군구 단위 산사태 예측정보와 예보코드를 조회한다.",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="landslide_forecast_issues",
@@ -239,6 +267,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         description="산사태 예보 발령·해제 이력, 기관, 상태 정보를 조회한다.",
         response_format="json",
         response_type_param="_type",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="roadside_landslides",
@@ -251,6 +281,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         url="http://apis.data.go.kr/1400000/roadsideLndslInfoService/roadsideLndslInfoList",
         detail_url=f"{DATA_GO_BASE}/15074812/openapi.do",
         description="도로 인접 산사태 예방·복구 시설과 취약지역 정보를 조회한다.",
+        required_params=(),
+        optional_params=(),
     ),
     ApiEndpoint(
         key="erosion_control_dams",
@@ -263,6 +295,8 @@ API_ENDPOINTS: tuple[ApiEndpoint, ...] = (
         url="http://apis.data.go.kr/1400000/ecndmInfoService/ecndmInfoList",
         detail_url=f"{DATA_GO_BASE}/15074803/openapi.do",
         description="사방댐 관리번호, 관리주소, 좌표, 관리기관 정보를 조회한다.",
+        required_params=(),
+        optional_params=(),
     ),
 )
 
@@ -713,6 +747,9 @@ def _endpoint_catalog_entry(endpoint: ApiEndpoint) -> CatalogEntry:
         service_key_param=endpoint.service_key_param,
         response_format=endpoint.response_format,
         response_type_param=endpoint.response_type_param,
+        required_params=endpoint.required_params,
+        optional_params=endpoint.optional_params,
+        notes=endpoint.notes,
     )
 
 
