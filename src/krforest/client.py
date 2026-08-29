@@ -9,7 +9,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iter
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, TypeVar
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
+
+import httpx
 
 from ._http import AsyncSessionLike, ForestHttp, ResponseLike
 from .catalog import (
@@ -72,6 +74,7 @@ from .spatial import (
 )
 
 T = TypeVar("T")
+_ITER_PAGES_HARD_PAGE_CAP = 10_000
 
 
 class ForestClient:
@@ -108,12 +111,6 @@ class ForestClient:
     @classmethod
     def from_env(cls, **kwargs: Any) -> ForestClient:
         """환경 변수 기반 설정으로 클라이언트를 만든다."""
-
-        return cls(**kwargs)
-
-    @classmethod
-    def aio(cls, **kwargs: Any) -> ForestClient:
-        """krheritage와 같은 생성 패턴을 위한 비동기 클라이언트 생성자."""
 
         return cls(**kwargs)
 
@@ -162,6 +159,7 @@ class ForestClient:
         return await self._page(
             endpoint,
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
+            dict,
             lambda row: row,
             response_format=response_format,
         )
@@ -279,25 +277,30 @@ class ForestClient:
         fetched = 0
         current = page_no
         pages = 0
+        page_ceiling = max_pages
         while True:
             page = await fetch_page(*args, page_no=current, num_of_rows=num_of_rows, **kwargs)
             if page.is_empty:
                 return
+            if page_ceiling is None:
+                estimated = -(-page.total_count // num_of_rows) if num_of_rows > 0 else 1
+                page_ceiling = min(max(estimated, 1), _ITER_PAGES_HARD_PAGE_CAP)
             yield page
             pages += 1
             fetched += len(page.items)
-            if max_pages is not None and pages >= max_pages:
+            if pages >= page_ceiling:
                 return
             if max_items is not None and fetched >= max_items:
                 return
-            if not page.has_next_page or page.next_page_no is None:
+            if not page.has_next_page:
                 return
-            current = page.next_page_no
+            current += 1
 
     async def _page(
         self,
         endpoint: ApiEndpoint,
         params: Mapping[str, Any] | None,
+        model: type[T],
         parser: Callable[[dict[str, Any]], T],
         *,
         response_format: str | None = None,
@@ -330,7 +333,7 @@ class ForestClient:
         requested_num_of_rows = (
             int(params["numOfRows"]) if params and "numOfRows" in params else max(len(parsed), 10)
         )
-        return Page(
+        return Page[model](  # type: ignore[valid-type]
             items=tuple(parsed),
             total_count=payload.total_count if payload.total_count is not None else len(parsed),
             page_no=payload.page_no or requested_page_no,
@@ -437,6 +440,7 @@ class TravelNamespace:
         return await self._client._page(
             api_endpoint("mountain_weather"),
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
+            MountainWeather,
             parse_mountain_weather,
         )
 
@@ -459,6 +463,7 @@ class TravelNamespace:
         return await self._client._page(
             api_endpoint("national_recreation_forest_reservations"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            RecreationForestReservation,
             parse_recreation_forest_reservation,
         )
 
@@ -483,6 +488,7 @@ class TravelNamespace:
         return await self._client._page(
             api_endpoint("standard_recreation_forests"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            StandardRecreationForest,
             parse_standard_recreation_forest,
         )
 
@@ -521,7 +527,7 @@ class TravelNamespace:
 
         dataset = file_dataset("PBD0000221")
         data = await self._client.files.download(dataset.data_go_id)
-        return forest_spatial_points(data, dataset, name=name)
+        return await asyncio.to_thread(forest_spatial_points, data, dataset, name=name)
 
     async def kid_forest_centers(
         self,
@@ -532,7 +538,7 @@ class TravelNamespace:
 
         dataset = file_dataset("PBD0000220")
         data = await self._client.files.download(dataset.data_go_id)
-        return forest_spatial_points(data, dataset, name=name)
+        return await asyncio.to_thread(forest_spatial_points, data, dataset, name=name)
 
     async def traditional_village_forests(
         self,
@@ -543,7 +549,7 @@ class TravelNamespace:
 
         dataset = file_dataset("PBD0000077")
         data = await self._client.files.download(dataset.data_go_id)
-        return forest_spatial_points(data, dataset, name=name)
+        return await asyncio.to_thread(forest_spatial_points, data, dataset, name=name)
 
     async def recreation_forest_arboretums(
         self,
@@ -554,7 +560,7 @@ class TravelNamespace:
 
         dataset = file_dataset("PBD0000180")
         data = await self._client.files.download(dataset.data_go_id)
-        return forest_spatial_points(data, dataset, name=name)
+        return await asyncio.to_thread(forest_spatial_points, data, dataset, name=name)
 
     async def recreation_forests(
         self,
@@ -564,15 +570,18 @@ class TravelNamespace:
     ) -> tuple[RecreationForest, ...]:
         """휴양림 파일데이터를 조합해 위치, 주소, 시설, 예약 상세를 반환한다."""
 
-        promotion_data = await self._client.files.download(RECREATION_FOREST_PROMOTION_ID)
-        facility_data = await self._client.files.download(RECREATION_FOREST_FACILITY_ID)
-        policy_data = await self._client.files.download(RECREATION_FOREST_POLICY_ID)
-        reservation_data = await self._client.files.download(RECREATION_FOREST_RESERVATION_FILE_ID)
-        return build_recreation_forests(
-            csv_records(promotion_data),
-            csv_records(facility_data),
-            csv_records(policy_data),
-            csv_records(reservation_data),
+        promotion_data, facility_data, policy_data, reservation_data = await asyncio.gather(
+            self._client.files.download(RECREATION_FOREST_PROMOTION_ID),
+            self._client.files.download(RECREATION_FOREST_FACILITY_ID),
+            self._client.files.download(RECREATION_FOREST_POLICY_ID),
+            self._client.files.download(RECREATION_FOREST_RESERVATION_FILE_ID),
+        )
+        return await asyncio.to_thread(
+            _parse_recreation_forests,
+            promotion_data,
+            facility_data,
+            policy_data,
+            reservation_data,
             name=name,
             institution_id=institution_id,
         )
@@ -606,7 +615,7 @@ class SafetyNamespace:
     async def wildfire_risk_forecast(
         self,
         *,
-        exclude_forecast: bool | int | None = None,
+        exclude_forecast: bool | None = None,
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
@@ -615,10 +624,11 @@ class SafetyNamespace:
 
         query = dict(params)
         if exclude_forecast is not None:
-            query["excludeForecast"] = int(bool(exclude_forecast))
+            query["excludeForecast"] = _exclude_forecast_value(exclude_forecast)
         return await self._client._page(
             api_endpoint("wildfire_risk_forecast"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            WildfireRiskForecast,
             lambda row: parse_wildfire_risk_forecast(row, scope="national"),
         )
 
@@ -626,7 +636,7 @@ class SafetyNamespace:
         self,
         *,
         local_areas: str | None = None,
-        exclude_forecast: bool | int | None = None,
+        exclude_forecast: bool | None = None,
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
@@ -636,10 +646,11 @@ class SafetyNamespace:
         query = dict(params)
         query["localAreas"] = local_areas
         if exclude_forecast is not None:
-            query["excludeForecast"] = int(bool(exclude_forecast))
+            query["excludeForecast"] = _exclude_forecast_value(exclude_forecast)
         return await self._client._page(
             api_endpoint("wildfire_risk_forecast_sido"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            WildfireRiskForecast,
             lambda row: parse_wildfire_risk_forecast(row, scope="sido"),
         )
 
@@ -648,7 +659,7 @@ class SafetyNamespace:
         *,
         local_areas: str | None = None,
         upper_local_code: str | None = None,
-        exclude_forecast: bool | int | None = None,
+        exclude_forecast: bool | None = None,
         page_no: int = 1,
         num_of_rows: int = 10,
         **params: Any,
@@ -659,10 +670,11 @@ class SafetyNamespace:
         query["localAreas"] = local_areas
         query["upplocalcd"] = upper_local_code
         if exclude_forecast is not None:
-            query["excludeForecast"] = int(bool(exclude_forecast))
+            query["excludeForecast"] = _exclude_forecast_value(exclude_forecast)
         return await self._client._page(
             api_endpoint("wildfire_risk_forecast_sigungu"),
             _page_params(query, page_no=page_no, num_of_rows=num_of_rows),
+            WildfireRiskForecast,
             lambda row: parse_wildfire_risk_forecast(row, scope="sigungu"),
         )
 
@@ -710,6 +722,7 @@ class SafetyNamespace:
         return await self._client._page(
             api_endpoint("landslide_forecast_issues"),
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
+            LandslideForecastIssue,
             parse_landslide_forecast_issue,
         )
 
@@ -741,6 +754,7 @@ class SafetyNamespace:
         return await self._client._page(
             api_endpoint("erosion_control_dams"),
             _page_params(params, page_no=page_no, num_of_rows=num_of_rows),
+            ErosionControlDam,
             parse_erosion_control_dam,
         )
 
@@ -821,7 +835,8 @@ class FileDataNamespace:
     async def archive_files(self, data_go_id: str) -> dict[str, bytes]:
         """ZIP 파일데이터를 다운로드한 뒤 파일명 key의 bytes dict로 반환한다."""
 
-        return parse_archive_files(await self.download(data_go_id))
+        data = await self.download(data_go_id)
+        return await asyncio.to_thread(parse_archive_files, data)
 
     async def spatial_features(
         self,
@@ -837,8 +852,10 @@ class FileDataNamespace:
         """
 
         dataset = file_dataset(data_go_id)
-        return forest_spatial_features(
-            await self.download(data_go_id),
+        data = await self.download(data_go_id)
+        return await asyncio.to_thread(
+            forest_spatial_features,
+            data,
             dataset,
             name=name,
             geometry_types=geometry_types,
@@ -861,12 +878,39 @@ def _page_params(
     return query
 
 
+def _parse_recreation_forests(
+    promotion_data: bytes,
+    facility_data: bytes,
+    policy_data: bytes,
+    reservation_data: bytes,
+    *,
+    name: str | None,
+    institution_id: str | None,
+) -> tuple[RecreationForest, ...]:
+    return build_recreation_forests(
+        csv_records(promotion_data),
+        csv_records(facility_data),
+        csv_records(policy_data),
+        csv_records(reservation_data),
+        name=name,
+        institution_id=institution_id,
+    )
+
+
 def _yn_value(value: str | bool | None) -> str | None:
     if value is None:
         return None
     if isinstance(value, bool):
         return "Y" if value else "N"
-    return value
+    if isinstance(value, str):
+        return value
+    raise TypeError(f"expected str, bool, or None, got {type(value).__name__}")
+
+
+def _exclude_forecast_value(value: bool | None) -> int | None:
+    if value is None:
+        return None
+    return int(value)
 
 
 async def _submit_forest_go_download_history(
@@ -926,6 +970,7 @@ async def _submit_forest_go_download_history(
         ),
         dataset=dataset,
         endpoint=FOREST_GO_FILE_DOWNLOAD_HISTORY_URL,
+        attempts=1,
     )
     if int(response.status_code) >= 400:
         raise ForestRequestError(
@@ -949,11 +994,11 @@ async def _forest_go_request_with_retry(
     attempts: int = 3,
     backoff: float = 0.5,
 ) -> ResponseLike:
-    last_exc: Exception | None = None
+    last_exc: httpx.HTTPError | None = None
     for attempt in range(attempts):
         try:
             return await request()
-        except Exception as exc:  # pragma: no cover - network-dependent
+        except httpx.HTTPError as exc:  # pragma: no cover - network-dependent
             last_exc = exc
             if attempt + 1 < attempts:
                 await asyncio.sleep(backoff * (2**attempt))
@@ -962,7 +1007,22 @@ async def _forest_go_request_with_retry(
         provider=dataset.provider,
         endpoint=endpoint,
         failure_kind="network",
-    )
+    ) from last_exc
+
+
+_DATA_GO_KR_DOWNLOAD_HOSTS = frozenset({"www.data.go.kr", "data.go.kr"})
+
+
+def _validate_download_url(url: str, *, base_url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in _DATA_GO_KR_DOWNLOAD_HOSTS:
+        raise ForestRequestError(
+            f"data.go.kr file detail page linked to an untrusted download host: {url}",
+            provider="data.go.kr",
+            endpoint=base_url,
+            failure_kind="untrusted_host",
+        )
+    return url
 
 
 def _extract_download_url(html: str, *, base_url: str) -> str:
@@ -978,11 +1038,14 @@ def _extract_download_url(html: str, *, base_url: str) -> str:
             continue
         urls = list(_walk_content_urls(data))
         if urls:
-            return urljoin(base_url, urls[0])
+            return _validate_download_url(urljoin(base_url, urls[0]), base_url=base_url)
 
     fallback_match = re.search(r'"contentUrl"\s*:\s*"([^"]+)"', html)
     if fallback_match:
-        return str(urljoin(base_url, fallback_match.group(1).replace("\\/", "/")))
+        return _validate_download_url(
+            urljoin(base_url, fallback_match.group(1).replace("\\/", "/")),
+            base_url=base_url,
+        )
 
     raise ForestNoDataError(
         "data.go.kr file detail page did not contain a DataDownload contentUrl",
@@ -1001,23 +1064,12 @@ async def _get_detail_page(
     try:
         return await session.get(url, timeout=timeout)
     except Exception as exc:
-        fallback = url.replace("https://www.data.go.kr/", "http://www.data.go.kr/", 1)
-        if fallback == url:
-            raise ForestRequestError(
-                f"failed to fetch data.go.kr file detail page: {exc}",
-                provider="data.go.kr",
-                endpoint=url,
-                failure_kind="network",
-            ) from exc
-        try:
-            return await session.get(fallback, timeout=timeout)
-        except Exception as fallback_exc:
-            raise ForestRequestError(
-                f"failed to fetch data.go.kr file detail page: {fallback_exc}",
-                provider="data.go.kr",
-                endpoint=url,
-                failure_kind="network",
-            ) from fallback_exc
+        raise ForestRequestError(
+            f"failed to fetch data.go.kr file detail page: {exc}",
+            provider="data.go.kr",
+            endpoint=url,
+            failure_kind="network",
+        ) from exc
 
 
 def _walk_content_urls(value: Any) -> Iterator[str]:

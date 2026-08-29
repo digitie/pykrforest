@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import posixpath
+import struct
 import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import Collection, Iterator, Mapping
@@ -274,10 +275,33 @@ def _open_archive(data: bytes) -> zipfile.ZipFile:
         ) from exc
 
 
+_MAX_ARCHIVE_DECOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+_MAX_NESTED_ZIP_DEPTH = 2
+_MAX_ZIP_COMPRESSION_RATIO = 100
+
+
+def _guard_zip_member(info: zipfile.ZipInfo, budget: list[int]) -> None:
+    if info.compress_size > 0 and info.file_size / info.compress_size > _MAX_ZIP_COMPRESSION_RATIO:
+        raise ForestParseError(
+            "forest.go.kr ZIP member has a suspicious compression ratio",
+            provider="forest.go.kr",
+            failure_kind="parse",
+        )
+    budget[0] += info.file_size
+    if budget[0] > _MAX_ARCHIVE_DECOMPRESSED_BYTES:
+        raise ForestParseError(
+            "forest.go.kr ZIP archive exceeds the maximum allowed decompressed size",
+            provider="forest.go.kr",
+            failure_kind="parse",
+        )
+
+
 def _open_readers_from_archive(
     archive: zipfile.ZipFile,
     *,
     prefix: str = "",
+    depth: int = 0,
+    budget: list[int] | None = None,
 ) -> tuple[tuple[Any, str | None, str, str], ...]:
     try:
         import shapefile  # type: ignore[import-untyped]
@@ -288,31 +312,48 @@ def _open_readers_from_archive(
             failure_kind="parse",
         ) from exc
 
-    names = archive.namelist()
-    groups: dict[str, dict[str, str]] = {}
-    for member in names:
-        stem, extension = posixpath.splitext(member)
+    if budget is None:
+        budget = [0]
+
+    groups: dict[str, dict[str, zipfile.ZipInfo]] = {}
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        stem, extension = posixpath.splitext(info.filename)
         ext = extension.lower()
         if ext in {".shp", ".shx", ".dbf", ".prj"}:
-            groups.setdefault(stem.lower(), {})[ext] = member
+            groups.setdefault(stem.lower(), {})[ext] = info
 
     readers: list[tuple[Any, str | None, str, str]] = []
     for members in groups.values():
-        shp_name = members.get(".shp")
-        shx_name = members.get(".shx")
-        dbf_name = members.get(".dbf")
-        if shp_name is None or shx_name is None or dbf_name is None:
+        shp_info = members.get(".shp")
+        shx_info = members.get(".shx")
+        dbf_info = members.get(".dbf")
+        if shp_info is None or shx_info is None or dbf_info is None:
             continue
-        prj_name = members.get(".prj")
-        prj_text = archive.read(prj_name).decode("ascii", errors="ignore") if prj_name else None
-        reader = shapefile.Reader(
-            shp=io.BytesIO(archive.read(shp_name)),
-            shx=io.BytesIO(archive.read(shx_name)),
-            dbf=io.BytesIO(archive.read(dbf_name)),
-            encoding="cp949",
-            encodingErrors="replace",
-        )
-        source_file = _join_archive_path(prefix, _zip_name_from_member(archive, shp_name))
+        prj_info = members.get(".prj")
+        prj_text = None
+        if prj_info is not None:
+            _guard_zip_member(prj_info, budget)
+            prj_text = archive.read(prj_info.filename).decode("ascii", errors="ignore")
+        _guard_zip_member(shp_info, budget)
+        _guard_zip_member(shx_info, budget)
+        _guard_zip_member(dbf_info, budget)
+        try:
+            reader = shapefile.Reader(
+                shp=io.BytesIO(archive.read(shp_info.filename)),
+                shx=io.BytesIO(archive.read(shx_info.filename)),
+                dbf=io.BytesIO(archive.read(dbf_info.filename)),
+                encoding="cp949",
+                encodingErrors="replace",
+            )
+        except (shapefile.ShapefileException, struct.error, IndexError) as exc:
+            raise ForestParseError(
+                "forest.go.kr SHP archive contains a corrupt or truncated shapefile",
+                provider="forest.go.kr",
+                failure_kind="parse",
+            ) from exc
+        source_file = _join_archive_path(prefix, _zip_name_from_member(archive, shp_info.filename))
         readers.append((reader, prj_text, source_file, _layer_name(source_file)))
 
     # PBD0000041 is an aggregate ZIP whose actual SHP files live in one ZIP per
@@ -327,6 +368,13 @@ def _open_readers_from_archive(
         nested_stem = posixpath.splitext(posixpath.basename(nested_name))[0].lower()
         if nested_stem.endswith(("_geojson", "_gpx")):
             continue
+        if depth >= _MAX_NESTED_ZIP_DEPTH:
+            raise ForestParseError(
+                "forest.go.kr ZIP archive nests ZIP files too deeply",
+                provider="forest.go.kr",
+                failure_kind="parse",
+            )
+        _guard_zip_member(info, budget)
         try:
             nested = zipfile.ZipFile(io.BytesIO(archive.read(info.filename)))
         except zipfile.BadZipFile:
@@ -336,6 +384,8 @@ def _open_readers_from_archive(
                 _open_readers_from_archive(
                     nested,
                     prefix=_join_archive_path(prefix, nested_name),
+                    depth=depth + 1,
+                    budget=budget,
                 )
             )
         finally:
@@ -457,6 +507,8 @@ def _wgs84_point(
 
     if x is None or y is None:
         return None, None
+    if x == 0.0 and y == 0.0:
+        return None, None
     if -180 <= x <= 180 and -90 <= y <= 90:
         return y, x
     lon, lat = transformer.transform(x, y)
@@ -464,7 +516,12 @@ def _wgs84_point(
 
 
 def _shape_geometry(shape: Any, transformer: Any) -> dict[str, Any] | None:
-    geometry = getattr(shape, "__geo_interface__", None)
+    import shapefile
+
+    try:
+        geometry = getattr(shape, "__geo_interface__", None)
+    except shapefile.GeoJSON_Error:
+        return None
     if not isinstance(geometry, Mapping):
         return None
     coordinates = geometry.get("coordinates")
@@ -477,7 +534,12 @@ def _shape_geometry(shape: Any, transformer: Any) -> dict[str, Any] | None:
 
 
 def _shape_geometry_type(shape: Any) -> str | None:
-    geometry = getattr(shape, "__geo_interface__", None)
+    import shapefile
+
+    try:
+        geometry = getattr(shape, "__geo_interface__", None)
+    except shapefile.GeoJSON_Error:
+        return None
     return geometry.get("type") if isinstance(geometry, Mapping) else None
 
 
@@ -526,7 +588,7 @@ def _transform_coordinates(value: Any, transformer: Any) -> Any:
 
 
 def _transform_pair(x: float, y: float, transformer: Any) -> tuple[float, float]:
-    if -180 <= x <= 180 and -90 <= y <= 90:
+    if (x, y) != (0.0, 0.0) and -180 <= x <= 180 and -90 <= y <= 90:
         return x, y
     lon, lat = transformer.transform(x, y)
     return float(lon), float(lat)

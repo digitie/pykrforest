@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from dataclasses import dataclass, field
 
 
@@ -15,7 +16,8 @@ class AsyncTokenBucket:
     capacity: float | None = None
     _tokens: float = field(init=False)
     _updated_at: float = field(init=False)
-    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
+    _waiters: deque[asyncio.Future[None]] = field(default_factory=deque, init=False)
+    _timer_handle: asyncio.TimerHandle | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if self.max_rps <= 0:
@@ -25,14 +27,39 @@ class AsyncTokenBucket:
         self._updated_at = time.monotonic()
 
     async def acquire(self) -> None:
-        while True:
-            async with self._lock:
-                self._refill()
-                if self._tokens >= 1:
-                    self._tokens -= 1
-                    return
+        self._refill()
+        if not self._waiters and self._tokens >= 1:
+            self._tokens -= 1
+            return
+        fut: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self._waiters.append(fut)
+        self._schedule()
+        try:
+            await fut
+        except asyncio.CancelledError:
+            try:
+                self._waiters.remove(fut)
+            except ValueError:
+                pass
+            raise
+
+    def _schedule(self) -> None:
+        if self._timer_handle is not None:
+            return
+        while self._waiters:
+            self._refill()
+            if self._tokens < 1:
                 wait_for = (1 - self._tokens) / self.max_rps
-            await asyncio.sleep(wait_for)
+                self._timer_handle = asyncio.get_running_loop().call_later(
+                    wait_for, self._on_timer
+                )
+                return
+            self._tokens -= 1
+            self._waiters.popleft().set_result(None)
+
+    def _on_timer(self) -> None:
+        self._timer_handle = None
+        self._schedule()
 
     def _refill(self) -> None:
         now = time.monotonic()

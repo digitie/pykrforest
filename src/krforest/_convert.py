@@ -82,7 +82,7 @@ def without_none(params: Mapping[str, Any]) -> dict[str, Any]:
 def normalize_items(value: Any) -> list[dict[str, Any]]:
     """공공데이터 응답의 단일 객체/list/빈 값 형태를 list[dict]로 정규화한다."""
 
-    if value in (None, "", []):
+    if not value:
         return []
     if isinstance(value, Mapping):
         if "item" in value:
@@ -138,10 +138,26 @@ def redact_secret(text: str, secret: str | None) -> str:
     return text.replace(secret, "[redacted]")
 
 
+SENSITIVE_PARAM_KEYS: frozenset[str] = frozenset(
+    {
+        "servicekey",
+        "key",
+        "certkey",
+        "apikey",
+        "xapikey",
+        "authkey",
+        "accesskey",
+        "accesstoken",
+        "refreshtoken",
+        "authorization",
+    }
+)
+
+
 def mask_params(params: Mapping[str, Any]) -> dict[str, Any]:
     masked = dict(params)
     for key in list(masked):
-        if str(key).replace("_", "").lower() in {"servicekey", "key", "certkey"}:
+        if str(key).replace("_", "").lower() in SENSITIVE_PARAM_KEYS:
             value = str(masked[key])
             masked[key] = value[:4] + "..." if len(value) > 4 else "***"
     return masked
@@ -151,7 +167,7 @@ def public_params(params: Mapping[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in without_none(params).items()
-        if str(key).replace("_", "").lower() not in {"servicekey", "key", "certkey"}
+        if str(key).replace("_", "").lower() not in SENSITIVE_PARAM_KEYS
     }
 
 
