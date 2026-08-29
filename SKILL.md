@@ -45,7 +45,7 @@ python -m mypy src/krforest
 
 # 디버그 UI
 pip install -e ".[debug-ui]"
-streamlit run debug_ui/app.py
+streamlit run examples/streamlit_debug_ui.py
 ```
 
 ## 3. 디렉토리 지도
@@ -71,7 +71,7 @@ docs/
   resume.md / tasks.md / decisions.md / journal.md / forest-api.md ...
 ```
 
-의존 방향은 **models → exceptions/_convert → parser/processor/spatial → _http → client → debug_ui**. 역방향 import는 만들지 않는다.
+의존 방향은 **models → exceptions/_convert → parser/processor/spatial → _http → client → examples/streamlit_debug_ui.py**. 역방향 import는 만들지 않는다.
 
 ## 4. 절대 하지 말 것 (DO NOT)
 

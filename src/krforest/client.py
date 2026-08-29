@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass
 from types import TracebackType
@@ -25,9 +26,8 @@ from .catalog import (
     file_datasets,
 )
 from .config import ForestConfig
-from .debug import DebugRun, jsonable, redact_sensitive
+from .debug import DebugRun, debug_error, jsonable, redact_sensitive
 from .exceptions import (
-    ForestApiError,
     ForestAuthError,
     ForestNoDataError,
     ForestParseError,
@@ -193,6 +193,7 @@ class ForestClient:
             "response_format": response_format,
         }
         request: dict[str, Any] = {}
+        started_at = time.monotonic()
         try:
             query = _page_params(params, page_no=page_no, num_of_rows=num_of_rows)
             request = {
@@ -208,25 +209,9 @@ class ForestClient:
                 num_of_rows=num_of_rows,
                 response_format=response_format,
             )
-        except ForestApiError as exc:
-            trace.append("failed")
-            return DebugRun(
-                function=endpoint.key,
-                input=redact_sensitive(jsonable(input_data)),
-                request=redact_sensitive(jsonable(request)),
-                response={},
-                parsed=None,
-                processed=None,
-                trace=trace,
-                catalog=jsonable(entry),
-                error={
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                    "metadata": redact_sensitive(jsonable(exc.metadata)),
-                },
-            )
         except Exception as exc:
-            trace.append("failed")
+            elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
+            trace.append(f"failed after {elapsed_ms}ms: {type(exc).__name__}")
             return DebugRun(
                 function=endpoint.key,
                 input=redact_sensitive(jsonable(input_data)),
@@ -236,19 +221,17 @@ class ForestClient:
                 processed=None,
                 trace=trace,
                 catalog=jsonable(entry),
-                error={
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                    "metadata": {},
-                },
+                error=debug_error(exc),
             )
 
-        trace.append("success")
+        elapsed_ms = round((time.monotonic() - started_at) * 1000, 1)
+        trace.append(f"success in {elapsed_ms}ms")
         request["url"] = page.context.request_url or endpoint.url
         request["query"] = dict(page.context.request_params)
         response = {
             "status_code": 200,
             "headers": {},
+            "elapsed_ms": elapsed_ms,
             "body": page.raw,
         }
         return DebugRun(
@@ -257,7 +240,7 @@ class ForestClient:
             request=redact_sensitive(jsonable(request)),
             response=redact_sensitive(jsonable(response)),
             parsed=page,
-            processed=page,
+            processed=list(page.items),
             trace=trace,
             catalog=jsonable(entry),
         )

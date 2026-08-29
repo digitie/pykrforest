@@ -15,7 +15,7 @@ from .catalog import (
 )
 from .client import ForestClient
 from .config import ForestConfig
-from .debug import DebugRun, jsonable, redact_sensitive, save_fixture
+from .debug import DebugRun, debug_error, jsonable, redact_sensitive, save_fixture
 from .exceptions import (
     ForestApiError,
     ForestAuthError,
@@ -81,6 +81,7 @@ __all__ = [
     "api_endpoints",
     "catalog_entries",
     "catalog_entry",
+    "debug_error",
     "file_catalog",
     "file_datasets",
     "jsonable",

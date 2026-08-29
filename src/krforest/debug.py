@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import json
 import re
+import traceback as _traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
+
+from .exceptions import ForestApiError
 
 SENSITIVE_KEYS = {
     "authorization",
@@ -89,6 +92,38 @@ def redact_sensitive(obj: Any) -> Any:
     if isinstance(obj, list):
         return [redact_sensitive(value) for value in obj]
     return obj
+
+
+_RETRYABLE_FAILURE_KINDS = {"network", "rate_limit", "server"}
+
+
+def debug_error(exc: Exception) -> dict[str, Any]:
+    """예외를 디버그 UI/fixture에 넣기 쉬운 구조화 dict로 변환한다.
+
+    ``type``/``message``/``traceback``은 모든 예외에 공통으로 채워진다.
+    ``ForestApiError`` 계열이면 ``provider``/``endpoint``/``status_code``/
+    ``result_code``/``failure_kind``/``retryable`` 필드를 추가한다. 반환값은
+    ``redact_sensitive()``를 거쳐 서비스키 등 민감정보가 남지 않는다.
+    """
+
+    payload: dict[str, Any] = {
+        "type": type(exc).__name__,
+        "message": str(exc),
+        "traceback": _traceback.format_exception(type(exc), exc, exc.__traceback__),
+    }
+    if isinstance(exc, ForestApiError):
+        payload.update(
+            {
+                "provider": exc.provider,
+                "endpoint": exc.endpoint,
+                "status_code": exc.status_code,
+                "result_code": exc.result_code,
+                "failure_kind": exc.failure_kind,
+                "retryable": exc.failure_kind in _RETRYABLE_FAILURE_KINDS,
+                "params": exc.params,
+            }
+        )
+    return cast(dict[str, Any], redact_sensitive(jsonable(payload)))
 
 
 def slugify(value: str) -> str:
