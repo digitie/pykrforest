@@ -166,15 +166,22 @@ def _recreation_forest_base_rows(
     policy_rows: tuple[dict[str, str], ...],
     reservation_rows: tuple[dict[str, str], ...],
 ) -> tuple[dict[str, str], ...]:
-    seen: set[str] = set()
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
     rows: list[dict[str, str]] = []
     for row in (*promotion_rows, *facility_rows, *policy_rows, *reservation_rows):
-        keys = _forest_index_keys(row)
-        if not keys:
+        forest_id = first_text(row, *_INSTITUTION_ID_KEYS)
+        forest_name = first_text(row, *_INSTITUTION_NAME_KEYS)
+        if forest_id is not None:
+            if forest_id in seen_ids:
+                continue
+            seen_ids.add(forest_id)
+        elif forest_name is not None:
+            if forest_name in seen_names:
+                continue
+            seen_names.add(forest_name)
+        else:
             continue
-        if seen.intersection(keys):
-            continue
-        seen.update(keys)
         rows.append(row)
     return tuple(rows)
 

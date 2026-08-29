@@ -83,7 +83,7 @@ class ForestHttp:
         timeout: float = 10.0,
         session: AsyncSessionLike | None = None,
         service_key_param: str = "ServiceKey",
-        max_rps: float | None = 5.0,
+        max_rps: float = 5.0,
     ) -> None:
         api_key = "".join(str(api_key).split())
         if not api_key:
@@ -95,7 +95,7 @@ class ForestHttp:
         self.session = session or _new_session(timeout)
         self._owns_session = session is None
         self.service_key_param = service_key_param
-        self._rate_limiter = AsyncTokenBucket(max_rps=max_rps) if max_rps is not None else None
+        self._rate_limiter = AsyncTokenBucket(max_rps=max_rps)
 
     async def aclose(self) -> None:
         """내부에서 만든 HTTP 세션을 닫는다."""
@@ -128,8 +128,7 @@ class ForestHttp:
             request_params=public_params(query),
             collected_at=datetime.now(UTC),
         )
-        if self._rate_limiter is not None:
-            await self._rate_limiter.acquire()
+        await self._rate_limiter.acquire()
         try:
             response = await self.session.get(
                 url,
@@ -144,7 +143,7 @@ class ForestHttp:
                 endpoint=endpoint,
                 params=mask_params(query),
                 failure_kind="network",
-            ) from exc
+            ) from None
         _raise_for_status(
             response,
             provider=provider,
@@ -176,10 +175,13 @@ class ForestHttp:
         provider: str = "data.go.kr",
         endpoint: str | None = None,
     ) -> bytes:
-        if self._rate_limiter is not None:
-            await self._rate_limiter.acquire()
+        await self._rate_limiter.acquire()
         try:
-            response = await self.session.get(url, timeout=self.timeout)
+            response = await self.session.get(
+                url,
+                timeout=self.timeout,
+                follow_redirects=False,
+            )
         except httpx.HTTPError as exc:
             message = redact_secret(str(exc), self.api_key)
             raise ForestRequestError(
@@ -187,7 +189,7 @@ class ForestHttp:
                 provider=provider,
                 endpoint=endpoint or url,
                 failure_kind="network",
-            ) from exc
+            ) from None
         _raise_for_status(
             response,
             provider=provider,
@@ -217,7 +219,7 @@ def _decode_payload(
             payload = response.json()
         except ValueError:
             if not text.startswith("<"):
-                message = redact_secret(text[:300], api_key)
+                message = redact_secret(text, api_key)[:300]
                 raise ForestParseError(
                     f"response was not valid JSON: {message}",
                     provider=provider,
@@ -245,7 +247,7 @@ def _decode_payload(
                 endpoint=endpoint,
                 failure_kind="parse",
             ) from exc
-    message = redact_secret(text[:300], api_key)
+    message = redact_secret(text, api_key)[:300]
     raise ForestParseError(
         f"unsupported response body: {message}",
         provider=provider,
@@ -325,11 +327,12 @@ def _normalize_payload(
             failure_kind="parse",
         ) from exc
 
+    parsed_total_count = to_int_or_none(body.get("totalCount"))
     return NormalizedPayload(
         items=items,
         page_no=to_int_or_none(body.get("pageNo")),
         num_of_rows=to_int_or_none(body.get("numOfRows")),
-        total_count=to_int_or_none(body.get("totalCount")) or len(items),
+        total_count=parsed_total_count if parsed_total_count is not None else len(items),
         raw=payload,
         header=header,
         context=context,
@@ -345,6 +348,8 @@ def _raise_for_status(
     params: dict[str, Any],
 ) -> None:
     status = int(response.status_code)
+    if status < 300:
+        return
     text = redact_secret(response.text, api_key)[:300]
     kwargs: dict[str, Any] = {
         "provider": provider,
@@ -356,6 +361,8 @@ def _raise_for_status(
         raise ForestAuthError(f"HTTP {status}: {text}", failure_kind="auth", **kwargs)
     if status == 429:
         raise ForestRateLimitError(f"HTTP {status}: {text}", failure_kind="rate_limit", **kwargs)
+    if 300 <= status < 400:
+        raise ForestRequestError(f"HTTP {status}: {text}", failure_kind="redirect", **kwargs)
     if 400 <= status < 500:
         raise ForestRequestError(f"HTTP {status}: {text}", failure_kind="request", **kwargs)
     if 500 <= status < 600:

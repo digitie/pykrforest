@@ -23,7 +23,7 @@ def download_html(name: str) -> str:
     <html><head>
       <script type="application/ld+json">
       {{"distribution": [{{"@type": "DataDownload",
-        "contentUrl": "https://files.example.test/{name}.csv"}}]}}
+        "contentUrl": "https://www.data.go.kr/cmm/cmm/fileDownload.do?atchFileId={name}"}}]}}
       </script>
     </head></html>
     """
