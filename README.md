@@ -1,15 +1,42 @@
 # python-krforest-api
 
-Korea Forest Service 공개 데이터를 여행과 안전 use case 중심으로 다루는 비공식 async Python client다.
+![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)
+![GPL-3.0-or-later 라이선스](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)
+![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)
+
+Korea Forest Service(산림청)와 `data.go.kr`이 공개하는 데이터를 여행과 안전 use case 중심으로 다루는 비공식 async Python client다. `ForestClient`는 `travel`/`safety`/`files` namespace로 OpenAPI와 파일데이터를 함께 제공하며, 좌표·주소는 외부 도메인 패키지 없이 `latitude`/`longitude`/`address` 원시 필드로 노출한다.
 
 이 package는 생물학, 연구, 임업 사업, 관련 없는 행정 dataset을 넓게 감싸지 않는다. 현재 scope는 다음과 같다.
 
 - 여행: 숲길, 둘레길, 백두대간 trail, 유명산, 산악기상, 숲나들e 예약 API, 국립자연휴양림 standard data, 휴양림 상세, forest.go.kr SHP 공간 dataset
 - 안전: 산불 위험/통계, 산사태 예측/이력, 사방댐, 산악기상, 안전 file dataset
 
-## 문서 언어 정책
+## 현재 상태
 
-이 저장소의 모든 Markdown/RST 문서는 한글로 작성한다. API field, code identifier, 명령어, URL, provider 원문은 필요한 경우 원문을 유지한다.
+진행 중인 변경 사항과 릴리스 예정 항목은 [`CHANGELOG.md`](CHANGELOG.md)의 `[Unreleased]` 섹션을 정본으로 확인한다.
+
+## 제공 표면
+
+| 표면 | 진입점 | 설명 |
+|------|--------|------|
+| Python 라이브러리 | `from krforest import ForestClient` | async-only 여행/안전 API + 파일데이터 클라이언트 |
+| 디버그 UI (선택 설치) | `streamlit run debug_ui/app.py` | Streamlit 기반 요청/응답/fixture 확인 도구 (`pip install -e ".[debug-ui]"`) |
+
+## 먼저 읽을 문서
+
+| 필요 정보 | 문서 |
+|-----------|------|
+| 에이전트 작업 가이드라인(절대 규칙, 빠른 시작, 디렉터리 지도) | [`SKILL.md`](SKILL.md) |
+| 에이전트 문서 진입점 | [`AGENTS.md`](AGENTS.md) |
+| 현재 진척도와 이어서 할 "다음 작업" | [`docs/resume.md`](docs/resume.md) |
+| 프로젝트 백로그 | [`docs/tasks.md`](docs/tasks.md) |
+| 기술·정책 의사결정(ADR) | [`docs/decisions.md`](docs/decisions.md) |
+| 작업 일지 | [`docs/journal.md`](docs/journal.md) |
+| 구현 대상 API 범위와 endpoint 카탈로그 | [`docs/forest-api.md`](docs/forest-api.md) |
+| 디버그 UI fixture/replay 구조 | [`docs/debug-fixtures.md`](docs/debug-fixtures.md) |
+| 로컬 개발 환경 반복 이슈 | [`docs/development-notes.md`](docs/development-notes.md) |
+| live 테스트 실행 메모 | [`docs/live-test-notes.md`](docs/live-test-notes.md) |
+| TripMate 연동 활용 메모 | [`docs/tripmate-forest-map-data.md`](docs/tripmate-forest-map-data.md) |
 
 ## 설치
 
@@ -68,6 +95,8 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+이 예제는 `travel` namespace의 대표 메서드 4종만 보여준다. 전체 구현 endpoint 카탈로그는 [`docs/forest-api.md`](docs/forest-api.md)를 참고한다.
 
 Paged API 응답은 typed item 또는 raw item mapping을 담은 `Page`와 안전한 call context를 반환한다. 좌표·주소가 있는 모델은 외부 의존 없이 `latitude: float | None`, `longitude: float | None`, `address: str | None`을 직접 노출한다.
 
@@ -140,25 +169,49 @@ pip install -e ".[debug-ui]"
 streamlit run debug_ui/app.py
 ```
 
-## Live test
+## 검증
 
-```powershell
-$env:DATA_GO_KR_SERVICE_KEY = "..."
+```bash
+# 단위 테스트 (네트워크 호출 없음)
+python -m pytest
+
+# 실서버 호출 테스트 (service key 필요)
+$env:DATA_GO_KR_SERVICE_KEY = "..."  # PowerShell
 pytest -m live
+
+# 린트와 타입 검사
+python -m ruff check .
+python -m mypy src/krforest
 ```
 
 `api.forest.go.kr` trail endpoint는 data.go.kr key로 통과하는 것이 기대된다. 일부 `apis.data.go.kr/1400000` safety API는 service-specific approval이 없으면 HTTP 403을 반환할 수 있으며, live test는 이를 authorization xfail로 보고한다.
 
-## 문서 지도
+## 데이터와 외부 API
 
-- [`SKILL.md`](SKILL.md) — 에이전트 작업 가이드라인 (절대 규칙, 구현 원칙, 로컬 환경 이슈 해결)
-- [`AGENTS.md`](AGENTS.md) — 에이전트 문서 진입점(Entrypoint)
-- [`docs/resume.md`](docs/resume.md) — 현재 진척도와 이어서 해야 할 "다음 작업"
-- [`docs/tasks.md`](docs/tasks.md) — 프로젝트 백로그
-- [`docs/decisions.md`](docs/decisions.md) — 프로젝트 기술 및 정책 의사결정(ADR)
-- [`docs/journal.md`](docs/journal.md) — 작업 일지
+| 항목 | 기준 |
+|------|------|
+| data.go.kr OpenAPI | 국립산림과학원 산악기상정보, 국립자연휴양림 예약/표준 데이터, 산불통계 등 |
+| forest.go.kr OpenAPI/파일데이터 | 숲길·둘레길·백두대간 trail, 산불위험 V2, 산사태 예보발령, SHP/GeoJSON/GPX 공간 dataset |
 
-## Reference
+Curated scope는 data.go.kr와 forest.go.kr 공개 페이지를 기준으로 확인했다. 예시는 `https://www.data.go.kr/data/15084696/openapi.do`와 forest.go.kr public-data download list다. 구현 대상 endpoint의 전체 목록은 [`docs/forest-api.md`](docs/forest-api.md)를 참고한다.
 
-Curated scope는 data.go.kr와 forest.go.kr 공개 페이지를 기준으로 확인했다. 예시는 `https://www.data.go.kr/data/15084696/openapi.do`와 forest.go.kr public-data download list다.
+## 디렉터리 개요
 
+| 경로 | 역할 |
+|------|------|
+| `src/krforest/` | 클라이언트 라이브러리(client, config, `_http`, parser, processor, spatial, catalog, models, replay, debug, exceptions) |
+| `tests/` | 네트워크 없는 단위 테스트 + opt-in live 테스트(`-m live`) |
+| `tests/fixtures/` | `save_fixture`로 생성한 replay fixture |
+| `debug_ui/` | Streamlit 기반 디버그 UI (`pip install -e ".[debug-ui]"`) |
+| `docs/` | 에이전트/기여자 문서 (resume, tasks, decisions, journal, forest-api, debug-fixtures 등) |
+
+## 문서와 기여 규칙
+
+- 이 저장소의 모든 Markdown/RST 문서는 한글로 작성한다. API field, code identifier, 명령어, URL, provider 원문은 필요한 경우 원문을 유지한다.
+- 작업 전 [`AGENTS.md`](AGENTS.md)와 [`SKILL.md`](SKILL.md)를 먼저 읽는다.
+- 작업 완료 후 [`docs/journal.md`](docs/journal.md)를 역시간순으로 갱신하고, 진척도가 바뀌면 [`docs/resume.md`](docs/resume.md)도 갱신한다.
+- 구조적 결정은 [`docs/decisions.md`](docs/decisions.md)에 ADR로, 사용자 가시 변경은 [`CHANGELOG.md`](CHANGELOG.md)에 기록한다.
+
+## 법적 고지
+
+GPL-3.0-or-later 라이선스는 이 저장소에 포함된 소스 코드와 문서에만 적용된다. 이 패키지가 감싸는 산림청·`data.go.kr` 공개 데이터와 API의 이용은 각 제공 기관의 이용약관, 저작권, 재배포 조건을 따르며, 이 프로젝트는 그 데이터의 정확성이나 법적 효력을 보장하지 않는다.
